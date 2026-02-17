@@ -35,12 +35,18 @@ This is implemented in the escalation Edge Function and documented in code comme
    flutter pub get
    ```
 
-2. **Environment**: Create `lib/core/config/env.dart` or use `--dart-define` for:
-   - `SUPABASE_URL`
-   - `SUPABASE_ANON_KEY`
-   See `lib/core/config/` for the expected names.
+2. **Environment**: Add your Supabase keys so the app can connect.
+   - Put a `.env.local` file in the `location_sharing/` directory (Flutter project root) with:
+     ```
+     SUPABASE_URL=https://your-project.supabase.co
+     SUPABASE_ANON_KEY=your-anon-key
+     ```
+   - Get the values from [Supabase Dashboard](https://supabase.com/dashboard) → your project → **Settings** → **API** (Project URL and anon public key).
+   - See `.env.local.example` for the exact variable names. You can still use `--dart-define=SUPABASE_URL=...` instead if you prefer.
 
-3. **Supabase**: Run migrations from `supabase/migrations/` (if provided) or create tables and RLS from [docs/SCHEMA.md](docs/SCHEMA.md). Deploy Edge Functions for incident creation and escalation.
+3. **Supabase tables**: Create tables and RLS once (they are not created automatically).
+   - **Option A** – SQL Editor: In Supabase Dashboard → **SQL Editor**, paste and run the contents of `supabase/migrations/20250217000000_initial_schema.sql`.
+   - **Option B** – CLI: Install [Supabase CLI](https://supabase.com/docs/guides/cli), then from the project root run `supabase link --project-ref <your-project-ref>` and `supabase db push` to apply migrations.
 
 4. **Google Maps**:
    - Android: add API key in `android/app/src/main/AndroidManifest.xml` (see [Google Maps Flutter](https://pub.dev/packages/google_maps_flutter)).

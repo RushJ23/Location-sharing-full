@@ -1,11 +1,15 @@
+import 'package:flutter_dotenv/flutter_dotenv.dart';
+
 /// Environment configuration (dev/prod).
-/// Use --dart-define=SUPABASE_URL=... and SUPABASE_ANON_KEY=... or set defaults for dev.
+/// Load .env.local via dotenv in main(); falls back to --dart-define if not set.
 class AppEnv {
   AppEnv._();
 
-  static const String supabaseUrl =
+  static String get supabaseUrl =>
+      dotenv.env['SUPABASE_URL']?.trim() ??
       String.fromEnvironment('SUPABASE_URL', defaultValue: '');
-  static const String supabaseAnonKey =
+  static String get supabaseAnonKey =>
+      dotenv.env['SUPABASE_ANON_KEY']?.trim() ??
       String.fromEnvironment('SUPABASE_ANON_KEY', defaultValue: '');
 
   static bool get isProd =>
