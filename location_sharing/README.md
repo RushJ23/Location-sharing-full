@@ -1,0 +1,99 @@
+# Location-Sharing Safety App
+
+A consent-first mobile app that tracks your location on-device and shares it only during an emergency escalation or with an opt-in "always share" list. Built with Flutter and Supabase.
+
+## Design rationale
+
+- **Privacy first**: Location is stored locally; nothing is uploaded until an incident is triggered or you opt into always-share. See [docs/TECHNICAL_SPEC.md](docs/TECHNICAL_SPEC.md).
+- **Backend: Supabase**: Auth, Postgres with RLS, Edge Functions for escalation, and Realtime for incident updates. RLS keeps "who can see what" in one place and fits incident-scoped access. See schema in [docs/SCHEMA.md](docs/SCHEMA.md).
+- **Map: Google Maps**: `google_maps_flutter` for map screen, markers, and incident polylines. Simple setup and good Flutter support.
+
+### Escalation order: "Closest → furthest"
+
+When an incident is created, contacts are notified in order so that those who can help fastest are reached first:
+
+1. **Contacts with location available**: If a contact is on your "Always Share" list (or has opted in to share location for emergency response), we use their latest known location. We compute distance from your last known position and sort **ascending** (closest first) within each layer.
+2. **Others**: We use your **manual priority** order within the layer (if you set one). If not set, we use a deterministic fallback: e.g. their last known "home" or safe zone center if available, otherwise creation order by contact id so the order is stable.
+3. **Layers**: Escalation runs Layer 1 first (all Layer 1 contacts in the order above), then after a timeout with no "confirmed safe" response, Layer 2, then Layer 3.
+
+This is implemented in the escalation Edge Function and documented in code comments there and in [docs/TECHNICAL_SPEC.md](docs/TECHNICAL_SPEC.md).
+
+## Getting started
+
+### Prerequisites
+
+- Flutter SDK ^3.11.0
+- Dart 3.11+
+- Supabase project (Auth, Postgres, Edge Functions, Realtime)
+- Google Maps API key (Android + iOS) for map features
+
+### Setup
+
+1. Clone and open the project:
+   ```bash
+   cd location_sharing
+   flutter pub get
+   ```
+
+2. **Environment**: Create `lib/core/config/env.dart` or use `--dart-define` for:
+   - `SUPABASE_URL`
+   - `SUPABASE_ANON_KEY`
+   See `lib/core/config/` for the expected names.
+
+3. **Supabase**: Run migrations from `supabase/migrations/` (if provided) or create tables and RLS from [docs/SCHEMA.md](docs/SCHEMA.md). Deploy Edge Functions for incident creation and escalation.
+
+4. **Google Maps**:
+   - Android: add API key in `android/app/src/main/AndroidManifest.xml` (see [Google Maps Flutter](https://pub.dev/packages/google_maps_flutter)).
+   - iOS: add key in `ios/Runner/AppDelegate.swift` and `Info.plist` (e.g. `GMSServices.provideAPIKey`).
+
+5. **Google Maps**: Add your API key so the map screen works.
+   - Android: in `android/app/src/main/AndroidManifest.xml` inside `<application>` add:
+     `<meta-data android:name="com.google.android.geo.API_KEY" android:value="YOUR_ANDROID_KEY"/>`
+   - iOS: in `ios/Runner/AppDelegate.swift` call `GMSServices.provideAPIKey("YOUR_IOS_KEY")` and add the key to `Info.plist` as `GMSServicesProviderAPIKey`.
+
+6. **Firebase (optional, for push)**: Run `flutterfire configure` to generate `lib/firebase_options.dart`. Then in `main.dart` call `await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);` before other init. FCM token is saved to Supabase when the user is signed in.
+
+7. **Permissions** (see below) must be declared for location and background execution.
+
+### Run
+
+```bash
+flutter run
+```
+
+## Permissions
+
+- **Location**: Foreground and background. The app requests background only after explaining why (safety check and curfew). On Android a foreground service is used when tracking is enabled.
+- **Notifications**: Required for "Are you safe?" and incident/escalation push. Configure FCM and store device token in Supabase `profiles.fcm_token`.
+
+See platform docs:
+
+- [Android location](https://developer.android.com/training/location/permissions)
+- [iOS location](https://developer.apple.com/documentation/corelocation/requesting_authorization_for_location_services)
+- [Android foreground service](https://developer.android.com/develop/background-work/services/foreground-services)
+
+## Project structure
+
+```
+lib/
+  core/         # auth, config, router, theme
+  data/         # local DB (Drift), remote (Supabase), repositories
+  features/     # auth, onboarding, contacts, map, settings, incidents, safety
+  shared/       # shared widgets and domain models
+```
+
+## Tests
+
+- Unit: safe zone containment (point-in-circle), curfew check (isInsideAnySafeZone), app widget.
+- Integration: `integration_test/app_test.dart` (app launch); run with `flutter test integration_test/` on a device or emulator.
+
+Run: `flutter test`
+
+## Docs
+
+- [Technical spec](docs/TECHNICAL_SPEC.md) — privacy, location pipeline, curfew, escalation, maps.
+- [Schema and RLS](docs/SCHEMA.md) — Postgres tables and security policies.
+
+## License
+
+Private / course project. See repo for details.
