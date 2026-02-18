@@ -45,6 +45,8 @@ class _MapScreenState extends ConsumerState<MapScreen> {
       );
     }
     final mapDataAsync = ref.watch(mapDataProvider);
+    final safeZonesAsync = ref.watch(userSafeZonesProvider(user.id));
+
     // Build markers and camera target from data when available; otherwise empty/default so map always shows.
     final Set<Marker> markers = {};
     LatLng? cameraTarget;
@@ -74,6 +76,10 @@ class _MapScreenState extends ConsumerState<MapScreen> {
         }
       }
     }
+
+    final safeZoneCircles = safeZonesAsync.hasValue && safeZonesAsync.value != null
+        ? safeZonesToCircles(safeZonesAsync.value!)
+        : <Circle>{};
     final target = cameraTarget ?? _defaultCenter;
 
     return Scaffold(
@@ -86,6 +92,11 @@ class _MapScreenState extends ConsumerState<MapScreen> {
               zoom: 14,
             ),
             markers: markers,
+            circles: safeZoneCircles,
+            myLocationEnabled: true,
+            myLocationButtonEnabled: true,
+            zoomControlsEnabled: true,
+            zoomGesturesEnabled: true,
             onMapCreated: (controller) {
               _mapController.complete(controller);
             },

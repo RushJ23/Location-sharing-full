@@ -1,8 +1,12 @@
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
 
 import '../../../data/repositories/always_share_repository.dart';
 import '../../../features/incidents/domain/incident.dart';
 import '../../../features/incidents/providers/incident_providers.dart';
+import '../../../features/safety/domain/safe_zone.dart';
+import '../../../features/safety/providers/location_providers.dart';
 
 final alwaysShareRepositoryProvider = Provider<AlwaysShareRepository>((ref) {
   return AlwaysShareRepository();
@@ -37,3 +41,25 @@ final mapDataProvider = FutureProvider<MapData>((ref) async {
     return MapData(alwaysShare: [], incidents: []);
   }
 });
+
+final userSafeZonesProvider =
+    FutureProvider.family<List<SafeZone>, String>((ref, userId) async {
+  return ref.watch(safeZoneRepositoryProvider).getSafeZones(userId);
+});
+
+/// Converts user safe zones to map circles (highlighted with semi-transparent green).
+Set<Circle> safeZonesToCircles(List<SafeZone> zones) {
+  const fillColor = Color(0x3300C853); // Green at ~20% opacity
+  const strokeColor = Color(0xFF00C853); // Solid green border
+  return {
+    for (final z in zones)
+      Circle(
+        circleId: CircleId('safe_zone_${z.id}'),
+        center: LatLng(z.centerLat, z.centerLng),
+        radius: z.radiusMeters,
+        fillColor: fillColor,
+        strokeColor: strokeColor,
+        strokeWidth: 2,
+      ),
+  };
+}
