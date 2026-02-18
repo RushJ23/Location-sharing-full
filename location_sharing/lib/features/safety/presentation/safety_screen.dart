@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:geolocator/geolocator.dart';
 
 import '../../../core/auth/auth_providers.dart';
 import '../domain/curfew_check_service.dart';
@@ -126,11 +127,167 @@ class _SafetyScreenState extends ConsumerState<SafetyScreen> {
   }
 
   Future<void> _addSafeZone(BuildContext context, WidgetRef ref, String userId) async {
-    // Minimal: navigate to a simple add screen or show dialog with name, lat, lng, radius.
-    // For now show a snackbar that add is not fully implemented (or implement a dialog).
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Use map or settings to add safe zone with location')),
+    final nameController = TextEditingController(text: 'Home');
+    final latController = TextEditingController(text: '');
+    final lngController = TextEditingController(text: '');
+    final radiusController = TextEditingController(text: '200');
+    bool useCurrentLocation = true;
+
+    if (!context.mounted) return;
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (context, setState) {
+            return AlertDialog(
+              title: const Text('Add safe zone'),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    TextField(
+                      controller: nameController,
+                      decoration: const InputDecoration(
+                        labelText: 'Name',
+                        hintText: 'e.g. Home, Office',
+                      ),
+                      textCapitalization: TextCapitalization.words,
+                    ),
+                    const SizedBox(height: 12),
+                    CheckboxListTile(
+                      value: useCurrentLocation,
+                      onChanged: (v) => setState(() => useCurrentLocation = v ?? true),
+                      title: const Text('Use my current location'),
+                      contentPadding: EdgeInsets.zero,
+                      controlAffinity: ListTileControlAffinity.leading,
+                    ),
+                    if (!useCurrentLocation) ...[
+                      TextField(
+                        controller: latController,
+                        decoration: const InputDecoration(labelText: 'Latitude'),
+                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      ),
+                      const SizedBox(height: 8),
+                      TextField(
+                        controller: lngController,
+                        decoration: const InputDecoration(labelText: 'Longitude'),
+                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      ),
+                    ],
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: radiusController,
+                      decoration: const InputDecoration(
+                        labelText: 'Radius (meters)',
+                        hintText: 'e.g. 200',
+                      ),
+                      keyboardType: TextInputType.number,
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(ctx).pop(false),
+                  child: const Text('Cancel'),
+                ),
+                FilledButton(
+                  onPressed: () async {
+                    if (useCurrentLocation) {
+                      try {
+                        final pos = await Geolocator.getCurrentPosition(
+                          locationSettings: const LocationSettings(
+                            accuracy: LocationAccuracy.medium,
+                          ),
+                        );
+                        latController.text = pos.latitude.toString();
+                        lngController.text = pos.longitude.toString();
+                      } catch (_) {
+                        if (ctx.mounted) {
+                          ScaffoldMessenger.of(ctx).showSnackBar(
+                            const SnackBar(
+                                content: Text('Could not get location. Enable location or enter coordinates.')),
+                          );
+                        }
+                        return;
+                      }
+                    }
+                    final name = nameController.text.trim();
+                    if (name.isEmpty) {
+                      ScaffoldMessenger.of(ctx).showSnackBar(
+                        const SnackBar(content: Text('Enter a name')),
+                      );
+                      return;
+                    }
+                    final lat = double.tryParse(latController.text);
+                    final lng = double.tryParse(lngController.text);
+                    if (lat == null || lng == null) {
+                      ScaffoldMessenger.of(ctx).showSnackBar(
+                        const SnackBar(content: Text('Enter valid latitude and longitude')),
+                      );
+                      return;
+                    }
+                    final radius = double.tryParse(radiusController.text);
+                    if (radius == null || radius <= 0) {
+                      ScaffoldMessenger.of(ctx).showSnackBar(
+                        const SnackBar(content: Text('Enter a valid radius in meters')),
+                      );
+                      return;
+                    }
+                    Navigator.of(ctx).pop(true);
+                  },
+                  child: const Text('Add'),
+                ),
+              ],
+            );
+          },
+        );
+      },
     );
+
+    if (result != true || !context.mounted) return;
+
+    final name = nameController.text.trim();
+    double? lat = double.tryParse(latController.text);
+    double? lng = double.tryParse(lngController.text);
+    if (lat == null || lng == null) {
+      try {
+        final pos = await Geolocator.getCurrentPosition(
+          locationSettings: const LocationSettings(accuracy: LocationAccuracy.medium),
+        );
+        lat = pos.latitude;
+        lng = pos.longitude;
+      } catch (_) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Could not get location')),
+          );
+        }
+        return;
+      }
+    }
+    final radius = double.tryParse(radiusController.text) ?? 200.0;
+
+    try {
+      await ref.read(safeZoneRepositoryProvider).insertSafeZone(
+            userId: userId,
+            name: name,
+            centerLat: lat,
+            centerLng: lng,
+            radiusMeters: radius,
+          );
+      if (!context.mounted) return;
+      ref.invalidate(_safeZonesProvider(userId));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Safe zone added')),
+      );
+    } catch (e) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error: $e')),
+      );
+    }
   }
 
   Future<void> _deleteSafeZone(WidgetRef ref, SafeZone zone) async {

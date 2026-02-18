@@ -8,7 +8,6 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 import '../../../core/auth/auth_providers.dart';
 import '../../../data/repositories/always_share_repository.dart';
 import '../../../features/incidents/domain/incident.dart';
-import '../../../features/incidents/providers/incident_providers.dart';
 import '../providers/map_providers.dart';
 
 class MapScreen extends ConsumerStatefulWidget {
@@ -31,55 +30,81 @@ class _MapScreenState extends ConsumerState<MapScreen> {
         body: const Center(child: Text('Sign in to see the map')),
       );
     }
+    final mapDataAsync = ref.watch(mapDataProvider);
+    // Build markers and camera target from data when available; otherwise empty/default so map always shows.
+    final Set<Marker> markers = {};
+    LatLng? cameraTarget;
+    if (mapDataAsync.hasValue && mapDataAsync.value != null) {
+      final data = mapDataAsync.value!;
+      for (final loc in data.alwaysShare) {
+        markers.add(
+          Marker(
+            markerId: MarkerId('always_${loc.userId}'),
+            position: LatLng(loc.lat, loc.lng),
+            infoWindow: InfoWindow(title: 'Always share'),
+          ),
+        );
+        cameraTarget ??= LatLng(loc.lat, loc.lng);
+      }
+      for (final inc in data.incidents) {
+        if (inc.lastKnownLat != null && inc.lastKnownLng != null) {
+          markers.add(
+            Marker(
+              markerId: MarkerId('incident_${inc.id}'),
+              position: LatLng(inc.lastKnownLat!, inc.lastKnownLng!),
+              infoWindow: InfoWindow(title: 'Incident', snippet: inc.trigger),
+              onTap: () => context.go('/incidents/${inc.id}'),
+            ),
+          );
+          cameraTarget ??= LatLng(inc.lastKnownLat!, inc.lastKnownLng!);
+        }
+      }
+    }
+    final target = cameraTarget ?? _defaultCenter;
+
     return Scaffold(
       appBar: AppBar(title: const Text('Map')),
-      body: FutureBuilder<List<dynamic>>(
-        future: Future.wait([
-          ref.read(alwaysShareRepositoryProvider).getAlwaysShareLocations(),
-          ref.read(incidentRepositoryProvider).getActiveIncidents(),
-        ]),
-        builder: (context, snapshot) {
-          if (!snapshot.hasData) {
-            return const Center(child: CircularProgressIndicator());
-          }
-          final alwaysShare = snapshot.data![0] as List<AlwaysShareLocation>;
-          final incidents = snapshot.data![1] as List<Incident>;
-          final markers = <Marker>{};
-          LatLng? cameraTarget;
-          for (final loc in alwaysShare) {
-            markers.add(
-              Marker(
-                markerId: MarkerId('always_${loc.userId}'),
-                position: LatLng(loc.lat, loc.lng),
-                infoWindow: InfoWindow(title: 'Always share'),
-              ),
-            );
-            cameraTarget ??= LatLng(loc.lat, loc.lng);
-          }
-          for (final inc in incidents) {
-            if (inc.lastKnownLat != null && inc.lastKnownLng != null) {
-              markers.add(
-                Marker(
-                  markerId: MarkerId('incident_${inc.id}'),
-                  position: LatLng(inc.lastKnownLat!, inc.lastKnownLng!),
-                  infoWindow: InfoWindow(title: 'Incident', snippet: inc.trigger),
-                  onTap: () => context.go('/incidents/${inc.id}'),
-                ),
-              );
-              cameraTarget ??= LatLng(inc.lastKnownLat!, inc.lastKnownLng!);
-            }
-          }
-          return GoogleMap(
+      body: Stack(
+        children: [
+          GoogleMap(
             initialCameraPosition: CameraPosition(
-              target: cameraTarget ?? _defaultCenter,
+              target: target,
               zoom: 14,
             ),
             markers: markers,
             onMapCreated: (controller) {
               _mapController.complete(controller);
             },
-          );
-        },
+          ),
+          if (mapDataAsync.isLoading)
+            const Positioned(
+              top: 16,
+              left: 0,
+              right: 0,
+              child: Center(
+                child: Material(
+                  elevation: 2,
+                  child: Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    child: Text('Loading locations…'),
+                  ),
+                ),
+              ),
+            ),
+          if (mapDataAsync.hasError)
+            Positioned(
+              bottom: 16,
+              left: 16,
+              right: 16,
+              child: Material(
+                elevation: 2,
+                child: Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Text('Could not load locations: ${mapDataAsync.error}'),
+                ),
+              ),
+            ),
+        ],
       ),
     );
   }
