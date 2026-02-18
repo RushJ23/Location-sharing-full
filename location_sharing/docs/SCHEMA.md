@@ -75,14 +75,15 @@ User-defined circular geofences.
 ---
 
 ### curfew_schedules
-When to run safety check and which safe zones apply.
+When to run safety check and which safe zones apply. Each row defines a window [start_time, end_time] in the given timezone; the user is prompted at start time and every 10 min on "I'm safe" until in a safe zone or end time.
 
 | Column                    | Type      | Notes                          |
 |---------------------------|-----------|--------------------------------|
 | id                        | uuid PK   | default gen_random_uuid()       |
 | user_id                   | uuid FK   | owner                          |
 | safe_zone_ids             | uuid[]    | list of safe_zone id           |
-| time_local                | time      | e.g. 23:30                     |
+| start_time                | time      | e.g. 22:00 — be in safe zone by |
+| end_time                  | time      | e.g. 06:00 — stop checking after (can be next day) |
 | timezone                  | text      | IANA, e.g. America/New_York     |
 | enabled                   | boolean   | default true                   |
 | response_timeout_minutes  | int       | default 10                     |

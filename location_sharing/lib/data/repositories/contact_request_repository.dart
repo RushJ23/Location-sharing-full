@@ -77,32 +77,21 @@ class ContactRequestRepository {
     return ContactRequest.fromJson(Map<String, dynamic>.from(res as Map));
   }
 
+  /// Accepts the request. A DB trigger inserts both contact rows (acceptor and sender)
+  /// so both users see each other in their contacts.
   Future<void> accept(String requestId, String toUserId) async {
     if (_client == null) return;
-    final req = await _client
-        .from('contact_requests')
-        .select()
-        .eq('id', requestId)
-        .eq('to_user_id', toUserId)
-        .single();
-    final r = Map<String, dynamic>.from(req as Map);
-    final fromUserId = r['from_user_id'] as String;
     await _client.from('contact_requests').update({
       'status': 'accepted',
       'updated_at': DateTime.now().toIso8601String(),
-    }).eq('id', requestId);
-    await _client.from('contacts').insert([
-      {'user_id': toUserId, 'contact_user_id': fromUserId, 'layer': 1},
-      {'user_id': fromUserId, 'contact_user_id': toUserId, 'layer': 1},
-    ]);
+    }).eq('id', requestId).eq('to_user_id', toUserId);
   }
 
   Future<void> decline(String requestId, String toUserId) async {
     if (_client == null) return;
-    await _client
-        .from('contact_requests')
-        .update({'status': 'declined'})
-        .eq('id', requestId)
-        .eq('to_user_id', toUserId);
+    await _client.from('contact_requests').update({
+      'status': 'declined',
+      'updated_at': DateTime.now().toIso8601String(),
+    }).eq('id', requestId).eq('to_user_id', toUserId);
   }
 }

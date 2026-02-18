@@ -7,8 +7,10 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 
 import '../../../core/auth/auth_providers.dart';
 import '../../../core/config/app_env.dart';
+import '../../../data/repositories/always_share_repository.dart';
 import '../../../core/widgets/app_bar_with_back.dart';
 import '../providers/map_providers.dart';
+import '../utils/marker_icon_utils.dart';
 
 class MapScreen extends ConsumerStatefulWidget {
   const MapScreen({super.key});
@@ -20,18 +22,95 @@ class MapScreen extends ConsumerStatefulWidget {
 class _MapScreenState extends ConsumerState<MapScreen> {
   final Completer<GoogleMapController> _mapController = Completer<GoogleMapController>();
   static const LatLng _defaultCenter = LatLng(40.44, -79.94);
+  static const int _minMarkerSize = 44;
+  static const int _maxMarkerSize = 96;
+
+  Timer? _refreshTimer;
+  double? _zoom;
+  Set<Marker>? _contactMarkers;
+  List<AlwaysShareLocation> _alwaysShareList = [];
+  bool _boundsFitted = false;
+
+  /// Icon size grows when zoomed out so people stay easy to find.
+  int _markerSizeForZoom(double zoom) {
+    final clamped = zoom.clamp(8.0, 18.0);
+    final t = (18.0 - clamped) / 10.0;
+    return (_minMarkerSize + t * (_maxMarkerSize - _minMarkerSize)).round();
+  }
+
+  Future<void> _buildContactMarkers(List<AlwaysShareLocation> list, double zoom) async {
+    if (list.isEmpty) {
+      if (mounted) setState(() => _contactMarkers = null);
+      return;
+    }
+    final size = _markerSizeForZoom(zoom);
+    final icon = await createPersonMarkerIcon(size);
+    if (!mounted) return;
+    final Set<Marker> markers = {};
+    for (final loc in list) {
+      final title = loc.displayName != null && loc.displayName!.isNotEmpty
+          ? loc.displayName!
+          : 'Sharing with you';
+      markers.add(
+        Marker(
+          markerId: MarkerId('always_${loc.userId}'),
+          position: LatLng(loc.lat, loc.lng),
+          icon: icon,
+          infoWindow: InfoWindow(title: title, snippet: 'Sharing location with you'),
+        ),
+      );
+    }
+    if (mounted) setState(() => _contactMarkers = markers);
+  }
+
+  Future<void> _fitBoundsToShowAll(GoogleMapController controller) async {
+    if (_alwaysShareList.isEmpty) return;
+    if (_boundsFitted) return;
+    final bounds = LatLngBounds(
+      southwest: LatLng(
+        _alwaysShareList.map((e) => e.lat).reduce((a, b) => a < b ? a : b) - 0.005,
+        _alwaysShareList.map((e) => e.lng).reduce((a, b) => a < b ? a : b) - 0.005,
+      ),
+      northeast: LatLng(
+        _alwaysShareList.map((e) => e.lat).reduce((a, b) => a > b ? a : b) + 0.005,
+        _alwaysShareList.map((e) => e.lng).reduce((a, b) => a > b ? a : b) + 0.005,
+      ),
+    );
+    await controller.animateCamera(
+      CameraUpdate.newLatLngBounds(bounds, 80),
+    );
+    if (mounted) setState(() => _boundsFitted = true);
+  }
+
+  Future<void> _flyToPerson(AlwaysShareLocation loc) async {
+    final controller = await _mapController.future;
+    await controller.animateCamera(
+      CameraUpdate.newLatLngZoom(LatLng(loc.lat, loc.lng), 15),
+    );
+  }
 
   @override
   void initState() {
     super.initState();
-    // Refresh map data and safe zones every time the user opens the map.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final user = ref.read(currentUserProvider);
       if (user != null) {
-        ref.invalidate(mapDataProvider);
+        ref.invalidate(mapDataProvider(user.id));
         ref.invalidate(userSafeZonesProvider(user.id));
+        _refreshTimer = Timer.periodic(const Duration(seconds: 45), (_) {
+          if (mounted) {
+            final u = ref.read(currentUserProvider);
+            if (u != null) ref.invalidate(mapDataProvider(u.id));
+          }
+        });
       }
     });
+  }
+
+  @override
+  void dispose() {
+    _refreshTimer?.cancel();
+    super.dispose();
   }
 
   Future<void> _zoomIn() async {
@@ -89,23 +168,43 @@ class _MapScreenState extends ConsumerState<MapScreen> {
         ),
       );
     }
-    final mapDataAsync = ref.watch(mapDataProvider);
+    final mapDataAsync = ref.watch(mapDataProvider(user.id));
     final safeZonesAsync = ref.watch(userSafeZonesProvider(user.id));
 
-    // Build markers and camera target from data when available; otherwise empty/default so map always shows.
     final Set<Marker> markers = {};
     LatLng? cameraTarget;
+    List<AlwaysShareLocation> alwaysShare = [];
     if (mapDataAsync.hasValue && mapDataAsync.value != null) {
       final data = mapDataAsync.value!;
-      for (final loc in data.alwaysShare) {
-        markers.add(
-          Marker(
-            markerId: MarkerId('always_${loc.userId}'),
-            position: LatLng(loc.lat, loc.lng),
-            infoWindow: const InfoWindow(title: 'Sharing with you'),
-          ),
-        );
-        cameraTarget ??= LatLng(loc.lat, loc.lng);
+      alwaysShare = data.alwaysShare;
+      final listChanged = alwaysShare.isNotEmpty &&
+          (_alwaysShareList.length != alwaysShare.length ||
+              _alwaysShareList.isEmpty);
+      if (listChanged) {
+        _alwaysShareList = alwaysShare;
+        _boundsFitted = false;
+        final zoom = _zoom ?? 14;
+        _buildContactMarkers(alwaysShare, zoom);
+        _mapController.future.then((c) => _fitBoundsToShowAll(c));
+      }
+      if (_contactMarkers != null) {
+        markers.addAll(_contactMarkers!);
+      } else if (alwaysShare.isNotEmpty) {
+        for (final loc in alwaysShare) {
+          final title = loc.displayName != null && loc.displayName!.isNotEmpty
+              ? loc.displayName!
+              : 'Sharing with you';
+          markers.add(
+            Marker(
+              markerId: MarkerId('always_${loc.userId}'),
+              position: LatLng(loc.lat, loc.lng),
+              infoWindow: InfoWindow(
+                title: title,
+                snippet: 'Sharing location with you',
+              ),
+            ),
+          );
+        }
       }
       for (final inc in data.incidents) {
         if (inc.lastKnownLat != null && inc.lastKnownLng != null) {
@@ -120,6 +219,9 @@ class _MapScreenState extends ConsumerState<MapScreen> {
           cameraTarget ??= LatLng(inc.lastKnownLat!, inc.lastKnownLng!);
         }
       }
+      cameraTarget ??= alwaysShare.isNotEmpty
+          ? LatLng(alwaysShare.first.lat, alwaysShare.first.lng)
+          : null;
     }
 
     final safeZoneCircles = safeZonesAsync.hasValue && safeZonesAsync.value != null
@@ -144,8 +246,72 @@ class _MapScreenState extends ConsumerState<MapScreen> {
             zoomGesturesEnabled: true,
             onMapCreated: (controller) {
               _mapController.complete(controller);
+              controller.getZoomLevel().then((zoom) {
+                if (mounted) {
+                  setState(() => _zoom = zoom);
+                  if (_alwaysShareList.isNotEmpty) {
+                    _buildContactMarkers(_alwaysShareList, zoom);
+                    _fitBoundsToShowAll(controller);
+                  }
+                }
+              });
+            },
+            onCameraMove: (position) {
+              final z = position.zoom;
+              final prev = _zoom;
+              if (prev == null || (z - prev).abs() > 0.8) {
+                _zoom = z;
+                if (_alwaysShareList.isNotEmpty) {
+                  _buildContactMarkers(_alwaysShareList, z);
+                }
+              }
             },
           ),
+          if (alwaysShare.isNotEmpty)
+            Positioned(
+              top: 8,
+              left: 12,
+              right: 12,
+              child: Material(
+                elevation: 2,
+                borderRadius: BorderRadius.circular(12),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                  child: SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.only(right: 8),
+                          child: Text(
+                            'Find:',
+                            style: theme.textTheme.labelMedium?.copyWith(
+                              color: theme.colorScheme.onSurfaceVariant,
+                            ),
+                          ),
+                        ),
+                        ...alwaysShare.map((loc) {
+                          final name = loc.displayName != null &&
+                                  loc.displayName!.isNotEmpty
+                              ? loc.displayName!
+                              : 'Someone';
+                          return Padding(
+                            padding: const EdgeInsets.only(right: 6),
+                            child: FilterChip(
+                              label: Text(name),
+                              onSelected: (_) => _flyToPerson(loc),
+                              selected: false,
+                              showCheckmark: false,
+                            ),
+                          );
+                        }),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
           if (mapDataAsync.isLoading)
             const Positioned(
               top: 16,
@@ -171,6 +337,27 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                 child: Padding(
                   padding: const EdgeInsets.all(12),
                   child: Text('Could not load locations: ${mapDataAsync.error}'),
+                ),
+              ),
+            ),
+          if (mapDataAsync.hasValue &&
+              mapDataAsync.value != null &&
+              mapDataAsync.value!.alwaysShare.isEmpty)
+            Positioned(
+              top: 8,
+              left: 12,
+              right: 12,
+              child: Material(
+                elevation: 2,
+                borderRadius: BorderRadius.circular(12),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  child: Text(
+                    'No one is sharing location with you. Add contacts and turn on "Always share" to see them here.',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                  ),
                 ),
               ),
             ),

@@ -15,11 +15,11 @@ import '../../features/safety/presentation/safety_screen.dart';
 import '../../features/settings/presentation/settings_screen.dart';
 import '../config/app_env.dart';
 
-final _rootNavigatorKey = GlobalKey<NavigatorState>();
+final rootNavigatorKey = GlobalKey<NavigatorState>();
 
 GoRouter createAppRouter(Listenable? authRefresh) {
   return GoRouter(
-    navigatorKey: _rootNavigatorKey,
+    navigatorKey: rootNavigatorKey,
     refreshListenable: authRefresh ?? Listenable.merge([]),
     initialLocation: '/login',
     redirect: (context, state) {

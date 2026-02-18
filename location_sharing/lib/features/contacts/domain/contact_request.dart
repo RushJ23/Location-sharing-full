@@ -24,13 +24,18 @@ class ContactRequest {
       toUserId: json['to_user_id'] as String,
       status: json['status'] as String,
       createdAt: DateTime.parse(json['created_at'] as String),
-      fromDisplayName: json['from_profile'] != null
-          ? (json['from_profile'] as Map<String, dynamic>)['display_name'] as String?
-          : null,
-      toDisplayName: json['to_profile'] != null
-          ? (json['to_profile'] as Map<String, dynamic>)['display_name'] as String?
-          : null,
+      fromDisplayName: _displayNameFromProfile(json['from_profile']),
+      toDisplayName: _displayNameFromProfile(json['to_profile']),
     );
+  }
+
+  static String? _displayNameFromProfile(dynamic profile) {
+    if (profile == null) return null;
+    if (profile is Map) {
+      final name = profile['display_name'];
+      if (name is String && name.isNotEmpty) return name;
+    }
+    return null;
   }
 
   bool get isPending => status == 'pending';

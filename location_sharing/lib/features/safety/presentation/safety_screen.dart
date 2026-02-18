@@ -9,6 +9,7 @@ import '../domain/curfew_check_service.dart';
 import '../domain/curfew_schedule.dart';
 import '../domain/safe_zone.dart';
 import '../providers/location_providers.dart';
+import 'safety_check_dialog.dart';
 
 /// Ensures location service is on and permission granted, then gets current position.
 /// Returns null and shows a message if location is disabled or permission denied.
@@ -203,7 +204,7 @@ class _SafetyScreenState extends ConsumerState<SafetyScreen> {
                                 size: 22,
                               ),
                             ),
-                            title: Text('${s.timeLocal} ${s.timezone}'),
+                            title: Text('${s.startTime} – ${s.endTime} ${s.timezone}'),
                             subtitle: Text(
                               '$zoneSummary · Timeout: ${s.responseTimeoutMinutes} min${s.enabled ? '' : ' · Disabled'}',
                               style: theme.textTheme.bodySmall,
@@ -277,11 +278,9 @@ class _SafetyScreenState extends ConsumerState<SafetyScreen> {
         const SnackBar(content: Text('You are in a safe zone')),
       );
     } else {
-      await ref.read(safetyNotificationServiceProvider).showSafetyCheckNotification();
+      ref.read(safetyNotificationServiceProvider).cancelSafetyCheck();
       if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Safety check notification shown')),
-      );
+      await showSafetyCheckDialog(context, timeoutMinutes: 5);
     }
   }
 
@@ -457,13 +456,16 @@ class _SafetyScreenState extends ConsumerState<SafetyScreen> {
       await ref.read(curfewRepositoryProvider).insertCurfewSchedule(
             userId: userId,
             safeZoneIds: result.safeZoneIds,
-            timeLocal: result.timeLocal,
+            startTime: result.startTime,
+            endTime: result.endTime,
             timezone: result.timezone,
             responseTimeoutMinutes: result.responseTimeoutMinutes,
             enabled: result.enabled,
           );
       if (!context.mounted) return;
       ref.invalidate(_curfewSchedulesProvider(userId));
+      await ref.read(curfewSchedulerProvider)?.rescheduleAllForUser(userId);
+      if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Curfew added')));
     } catch (e) {
       if (!context.mounted) return;
@@ -490,7 +492,8 @@ class _SafetyScreenState extends ConsumerState<SafetyScreen> {
               id: schedule.id,
               userId: schedule.userId,
               safeZoneIds: result.safeZoneIds,
-              timeLocal: result.timeLocal,
+              startTime: result.startTime,
+              endTime: result.endTime,
               timezone: result.timezone,
               enabled: result.enabled,
               responseTimeoutMinutes: result.responseTimeoutMinutes,
@@ -500,6 +503,8 @@ class _SafetyScreenState extends ConsumerState<SafetyScreen> {
           );
       if (!context.mounted) return;
       ref.invalidate(_curfewSchedulesProvider(userId));
+      ref.read(curfewSchedulerProvider)?.rescheduleAllForUser(userId);
+      if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Curfew updated')));
     } catch (e) {
       if (!context.mounted) return;
@@ -510,19 +515,22 @@ class _SafetyScreenState extends ConsumerState<SafetyScreen> {
   Future<void> _deleteCurfew(WidgetRef ref, CurfewSchedule s) async {
     await ref.read(curfewRepositoryProvider).deleteCurfewSchedule(s.id);
     ref.invalidate(_curfewSchedulesProvider(s.userId));
+    await ref.read(curfewSchedulerProvider)?.cancelForSchedule(s.id);
   }
 }
 
 class _CurfewEditorResult {
   const _CurfewEditorResult({
     required this.safeZoneIds,
-    required this.timeLocal,
+    required this.startTime,
+    required this.endTime,
     required this.timezone,
     required this.responseTimeoutMinutes,
     required this.enabled,
   });
   final List<String> safeZoneIds;
-  final String timeLocal;
+  final String startTime;
+  final String endTime;
   final String timezone;
   final int responseTimeoutMinutes;
   final bool enabled;
@@ -534,27 +542,33 @@ Future<_CurfewEditorResult?> _showCurfewEditor(
   CurfewSchedule? existing,
 }) async {
   assert(zones.isNotEmpty);
-  // Parse existing time "HH:mm" or "23:30:00"
-  TimeOfDay initialTime = const TimeOfDay(hour: 23, minute: 30);
-  if (existing != null && existing.timeLocal.isNotEmpty) {
-    final parts = existing.timeLocal.split(':');
+  // Parse start/end "HH:mm" or "23:30:00"
+  TimeOfDay parseTime(String s) {
+    final parts = s.split(':');
     if (parts.length >= 2) {
       final h = int.tryParse(parts[0]);
       final m = int.tryParse(parts[1]);
       if (h != null && m != null && h >= 0 && h < 24 && m >= 0 && m < 60) {
-        initialTime = TimeOfDay(hour: h, minute: m);
+        return TimeOfDay(hour: h, minute: m);
       }
     }
+    return const TimeOfDay(hour: 23, minute: 30);
+  }
+  TimeOfDay initialStart = const TimeOfDay(hour: 23, minute: 30);
+  TimeOfDay initialEnd = const TimeOfDay(hour: 23, minute: 59);
+  if (existing != null) {
+    if (existing.startTime.isNotEmpty) initialStart = parseTime(existing.startTime);
+    if (existing.endTime.isNotEmpty) initialEnd = parseTime(existing.endTime);
   }
   final selectedIds = <String>{...(existing?.safeZoneIds ?? [])};
   if (existing == null) {
-    // New curfew: select all zones by default
-    for (final z in zones) {
-      selectedIds.add(z.id);
-    }
+    for (final z in zones) selectedIds.add(z.id);
   }
-  final timeController = TextEditingController(
-    text: '${initialTime.hour.toString().padLeft(2, '0')}:${initialTime.minute.toString().padLeft(2, '0')}',
+  final startTimeController = TextEditingController(
+    text: '${initialStart.hour.toString().padLeft(2, '0')}:${initialStart.minute.toString().padLeft(2, '0')}',
+  );
+  final endTimeController = TextEditingController(
+    text: '${initialEnd.hour.toString().padLeft(2, '0')}:${initialEnd.minute.toString().padLeft(2, '0')}',
   );
   const defaultTimezones = [
     'America/New_York',
@@ -609,27 +623,57 @@ Future<_CurfewEditorResult?> _showCurfewEditor(
                       )),
                   const SizedBox(height: 16),
                   Text(
-                    'Be in location by (local time)',
+                    'Start time (be in safe zone by)',
                     style: Theme.of(ctx).textTheme.titleSmall,
                   ),
                   const SizedBox(height: 8),
                   TextField(
-                    controller: timeController,
+                    controller: startTimeController,
                     decoration: const InputDecoration(
-                      hintText: 'e.g. 23:30',
-                      helperText: '24-hour format HH:mm',
+                      hintText: 'e.g. 22:00',
+                      helperText: '24-hour HH:mm',
                     ),
                     keyboardType: const TextInputType.numberWithOptions(signed: false),
                     onTap: () async {
+                      final parts = startTimeController.text.split(':');
                       final picked = await showTimePicker(
                         context: ctx,
                         initialTime: TimeOfDay(
-                          hour: int.tryParse(timeController.text.split(':').first) ?? 23,
-                          minute: int.tryParse(timeController.text.split(':').elementAtOrNull(1)?.substring(0, 2) ?? '') ?? 30,
+                          hour: int.tryParse(parts.first) ?? 22,
+                          minute: int.tryParse(parts.elementAtOrNull(1)?.substring(0, 2) ?? '') ?? 0,
                         ),
                       );
                       if (picked != null) {
-                        timeController.text =
+                        startTimeController.text =
+                            '${picked.hour.toString().padLeft(2, '0')}:${picked.minute.toString().padLeft(2, '0')}';
+                        setState(() {});
+                      }
+                    },
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    'End time (stop checking after)',
+                    style: Theme.of(ctx).textTheme.titleSmall,
+                  ),
+                  const SizedBox(height: 8),
+                  TextField(
+                    controller: endTimeController,
+                    decoration: const InputDecoration(
+                      hintText: 'e.g. 06:00',
+                      helperText: '24-hour HH:mm (can be next day)',
+                    ),
+                    keyboardType: const TextInputType.numberWithOptions(signed: false),
+                    onTap: () async {
+                      final parts = endTimeController.text.split(':');
+                      final picked = await showTimePicker(
+                        context: ctx,
+                        initialTime: TimeOfDay(
+                          hour: int.tryParse(parts.first) ?? 6,
+                          minute: int.tryParse(parts.elementAtOrNull(1)?.substring(0, 2) ?? '') ?? 0,
+                        ),
+                      );
+                      if (picked != null) {
+                        endTimeController.text =
                             '${picked.hour.toString().padLeft(2, '0')}:${picked.minute.toString().padLeft(2, '0')}';
                         setState(() {});
                       }
@@ -691,24 +735,29 @@ Future<_CurfewEditorResult?> _showCurfewEditor(
                     );
                     return;
                   }
-                  final timeStr = timeController.text.trim();
-                  final timeMatch = RegExp(r'^(\d{1,2}):(\d{2})$').firstMatch(timeStr);
-                  if (timeMatch == null) {
+                  String parseAndValidateTime(TextEditingController c, String label) {
+                    final s = c.text.trim();
+                    final m = RegExp(r'^(\d{1,2}):(\d{2})$').firstMatch(s);
+                    if (m == null) return '';
+                    final h = int.parse(m.group(1)!);
+                    final min = int.parse(m.group(2)!);
+                    if (h < 0 || h > 23 || min < 0 || min > 59) return '';
+                    return '${h.toString().padLeft(2, '0')}:${min.toString().padLeft(2, '0')}';
+                  }
+                  final startStr = parseAndValidateTime(startTimeController, 'Start');
+                  final endStr = parseAndValidateTime(endTimeController, 'End');
+                  if (startStr.isEmpty) {
                     ScaffoldMessenger.of(ctx).showSnackBar(
-                      const SnackBar(content: Text('Enter time as HH:mm (e.g. 23:30)')),
+                      const SnackBar(content: Text('Enter start time as HH:mm')),
                     );
                     return;
                   }
-                  final hour = int.parse(timeMatch.group(1)!);
-                  final minute = int.parse(timeMatch.group(2)!);
-                  if (hour < 0 || hour > 23 || minute < 0 || minute > 59) {
+                  if (endStr.isEmpty) {
                     ScaffoldMessenger.of(ctx).showSnackBar(
-                      const SnackBar(content: Text('Enter a valid time')),
+                      const SnackBar(content: Text('Enter end time as HH:mm')),
                     );
                     return;
                   }
-                  final timeLocal =
-                      '${hour.toString().padLeft(2, '0')}:${minute.toString().padLeft(2, '0')}';
                   final timeout = int.tryParse(timeoutController.text);
                   if (timeout == null || timeout < 1 || timeout > 120) {
                     ScaffoldMessenger.of(ctx).showSnackBar(
@@ -718,7 +767,8 @@ Future<_CurfewEditorResult?> _showCurfewEditor(
                   }
                   Navigator.of(ctx).pop(_CurfewEditorResult(
                     safeZoneIds: selectedIds.toList(),
-                    timeLocal: timeLocal,
+                    startTime: startStr,
+                    endTime: endStr,
                     timezone: selectedTimezoneHolder[0],
                     responseTimeoutMinutes: timeout,
                     enabled: enabled,

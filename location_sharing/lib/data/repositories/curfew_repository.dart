@@ -24,7 +24,8 @@ class CurfewRepository {
   Future<CurfewSchedule> insertCurfewSchedule({
     required String userId,
     required List<String> safeZoneIds,
-    required String timeLocal,
+    required String startTime,
+    required String endTime,
     required String timezone,
     bool enabled = true,
     int responseTimeoutMinutes = 10,
@@ -33,7 +34,8 @@ class CurfewRepository {
     final res = await _client.from('curfew_schedules').insert({
       'user_id': userId,
       'safe_zone_ids': safeZoneIds,
-      'time_local': timeLocal,
+      'start_time': startTime,
+      'end_time': endTime,
       'timezone': timezone,
       'enabled': enabled,
       'response_timeout_minutes': responseTimeoutMinutes,
@@ -45,7 +47,8 @@ class CurfewRepository {
     if (_client == null) return;
     await _client.from('curfew_schedules').update({
       'safe_zone_ids': schedule.safeZoneIds,
-      'time_local': schedule.timeLocal,
+      'start_time': schedule.startTime,
+      'end_time': schedule.endTime,
       'timezone': schedule.timezone,
       'enabled': schedule.enabled,
       'response_timeout_minutes': schedule.responseTimeoutMinutes,
@@ -70,7 +73,8 @@ class CurfewRepository {
           id: s.id,
           userId: s.userId,
           safeZoneIds: updated,
-          timeLocal: s.timeLocal,
+          startTime: s.startTime,
+          endTime: s.endTime,
           timezone: s.timezone,
           enabled: s.enabled,
           responseTimeoutMinutes: s.responseTimeoutMinutes,

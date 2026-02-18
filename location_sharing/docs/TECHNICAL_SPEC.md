@@ -20,9 +20,12 @@ A consent-first mobile app that tracks location on-device and shares it only dur
 ## 4. Curfew and Safety Check
 
 - **Safe zones**: Geofenced circles (center + radius); stored in Supabase and optionally cached locally. Containment = point-in-circle (distance ≤ radius).
-- **Schedule**: Curfew time (local time + timezone), list of safe zone IDs, enabled flag, response timeout (e.g. 5–10 min). Stored in Supabase; execution is local (Workmanager or similar).
-- **At curfew time**: If user is not inside any safe zone → show local notification: "Are you safe?" with actions YES / I NEED HELP.
-- **Outcomes**: YES → dismiss. I NEED HELP → create incident immediately. No response within timeout → create incident and start escalation.
+- **Schedule**: Each curfew has a **start time** and **end time** (local time + timezone), list of safe zone IDs, enabled flag, response timeout (e.g. 5–10 min). Stored in Supabase; execution is local via scheduled local notifications (`flutter_local_notifications` with timezone).
+- **At start time**: The app schedules a local notification for each enabled curfew at its start time. When that time is reached, the OS shows "Are you safe?" with actions I'M SAFE / I NEED HELP (no app open or button tap required).
+- **Outcomes**:
+  - **I'm safe**: Notification is dismissed and a **recheck is scheduled in 10 minutes**. If the user is still not in a safe zone at that time, the notification is shown again. This repeats every 10 minutes until either the user is in a safe zone or the **end time** is reached, after which no further checks run for that curfew.
+  - **I need help**: Create incident immediately and open create-incident flow.
+- **Manual trigger**: The Safety screen "Run curfew check now" button still shows the same notification immediately (e.g. if the user wants to test or trigger an alert manually).
 
 ## 5. Incidents and Escalation
 

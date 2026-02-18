@@ -5,6 +5,7 @@ import '../../../data/local/database_provider.dart';
 import '../../../data/repositories/curfew_repository.dart';
 import '../../../data/repositories/location_history_repository.dart';
 import '../../../data/repositories/safe_zone_repository.dart';
+import '../domain/curfew_scheduler.dart';
 import '../domain/location_tracking_service.dart';
 import '../domain/safety_notification_service.dart';
 
@@ -33,3 +34,6 @@ final curfewRepositoryProvider = Provider<CurfewRepository>((ref) {
 final safetyNotificationServiceProvider = Provider<SafetyNotificationService>((ref) {
   return SafetyNotificationService();
 });
+
+/// Set in main with the real scheduler; used to reschedule after curfew add/edit/delete.
+final curfewSchedulerProvider = Provider<CurfewScheduler?>((ref) => null);

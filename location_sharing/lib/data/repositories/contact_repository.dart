@@ -47,7 +47,7 @@ class ContactRepository {
     final res = await _client
         .from('profiles')
         .select('id, display_name')
-        .filter('id', 'in', '(${userIds.map((e) => "'$e'").join(',')})');
+        .inFilter('id', userIds);
     final map = <String, String>{};
     for (final row in res as List) {
       final m = row as Map<String, dynamic>;
