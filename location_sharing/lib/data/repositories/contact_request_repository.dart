@@ -13,36 +13,58 @@ class ContactRequestRepository {
     if (_client == null) return [];
     final res = await _client
         .from('contact_requests')
-        .select('*, from_profile:profiles!from_user_id(display_name)')
+        .select()
         .eq('to_user_id', userId)
         .eq('status', 'pending')
         .order('created_at', ascending: false);
-    return (res as List)
-        .map((e) => ContactRequest.fromJson(_flattenProfile(e as Map, 'from_profile')))
-        .toList();
+    final list = res as List;
+    if (list.isEmpty) return [];
+    final fromIds = list.map((e) => (e as Map)['from_user_id'] as String).toSet().toList();
+    final names = await _getDisplayNames(fromIds);
+    return list.map((e) {
+      final m = Map<String, dynamic>.from(e as Map);
+      final fid = m['from_user_id'] as String?;
+      if (fid != null && names.containsKey(fid)) {
+        m['from_profile'] = <String, dynamic>{'display_name': names[fid]};
+      }
+      return ContactRequest.fromJson(m);
+    }).toList();
   }
 
   Future<List<ContactRequest>> getOutgoing(String userId) async {
     if (_client == null) return [];
     final res = await _client
         .from('contact_requests')
-        .select('*, to_profile:profiles!to_user_id(display_name)')
+        .select()
         .eq('from_user_id', userId)
         .order('created_at', ascending: false);
-    return (res as List)
-        .map((e) => ContactRequest.fromJson(_flattenProfile(e as Map, 'to_profile')))
-        .toList();
+    final list = res as List;
+    if (list.isEmpty) return [];
+    final toIds = list.map((e) => (e as Map)['to_user_id'] as String).toSet().toList();
+    final names = await _getDisplayNames(toIds);
+    return list.map((e) {
+      final m = Map<String, dynamic>.from(e as Map);
+      final tid = m['to_user_id'] as String?;
+      if (tid != null && names.containsKey(tid)) {
+        m['to_profile'] = <String, dynamic>{'display_name': names[tid]};
+      }
+      return ContactRequest.fromJson(m);
+    }).toList();
   }
 
-  Map<String, dynamic> _flattenProfile(Map e, String key) {
-    final m = Map<String, dynamic>.from(e);
-    final p = m[key];
-    if (p is List && p.isNotEmpty) {
-      m[key] = p.first;
-    } else if (p is Map) {
-      m[key] = p;
+  Future<Map<String, String>> _getDisplayNames(List<String> userIds) async {
+    if (_client == null || userIds.isEmpty) return {};
+    final res = await _client
+        .from('profiles')
+        .select('id, display_name')
+        .in_('id', userIds);
+    final map = <String, String>{};
+    for (final row in res as List) {
+      final m = row as Map<String, dynamic>;
+      final id = m['id'] as String?;
+      if (id != null) map[id] = m['display_name'] as String? ?? '';
     }
-    return m;
+    return map;
   }
 
   Future<ContactRequest?> sendRequest({required String fromUserId, required String toUserId}) async {
