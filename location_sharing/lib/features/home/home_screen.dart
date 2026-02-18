@@ -6,38 +6,149 @@ class HomeScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
     return Scaffold(
-      appBar: AppBar(title: const Text('Location Sharing')),
-      body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
+      appBar: AppBar(
+        title: const Text('Location Sharing'),
+        titleTextStyle: theme.appBarTheme.titleTextStyle?.copyWith(
+          fontSize: 20,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+      body: SafeArea(
+        child: ListView(
+          padding: const EdgeInsets.all(20),
           children: [
-            const Text('Home'),
-            TextButton(
-              onPressed: () => context.go('/profile'),
-              child: const Text('Profile'),
+            const SizedBox(height: 8),
+            Text(
+              'Stay safe, stay connected',
+              style: theme.textTheme.titleMedium?.copyWith(
+                color: colorScheme.onSurfaceVariant,
+                fontWeight: FontWeight.w500,
+              ),
             ),
-            TextButton(
-              onPressed: () => context.go('/safety'),
-              child: const Text('Safety'),
+            const SizedBox(height: 24),
+            _MenuCard(
+              icon: Icons.person_rounded,
+              iconColor: colorScheme.primary,
+              title: 'Profile',
+              subtitle: 'Name, phone, school',
+              onTap: () => context.go('/profile'),
             ),
-            TextButton(
-              onPressed: () => context.go('/contacts'),
-              child: const Text('Contacts'),
+            const SizedBox(height: 12),
+            _MenuCard(
+              icon: Icons.shield_rounded,
+              iconColor: const Color(0xFF059669),
+              title: 'Safety',
+              subtitle: 'Safe zones & curfew',
+              onTap: () => context.go('/safety'),
             ),
-            TextButton(
-              onPressed: () => context.go('/settings'),
-              child: const Text('Settings'),
+            const SizedBox(height: 12),
+            _MenuCard(
+              icon: Icons.contacts_rounded,
+              iconColor: const Color(0xFF0891B2),
+              title: 'Contacts',
+              subtitle: 'Emergency contacts & layers',
+              onTap: () => context.go('/contacts'),
             ),
-            TextButton(
-              onPressed: () => context.go('/map'),
-              child: const Text('Map'),
+            const SizedBox(height: 12),
+            _MenuCard(
+              icon: Icons.map_rounded,
+              iconColor: const Color(0xFF7C3AED),
+              title: 'Map',
+              subtitle: 'View shared locations',
+              onTap: () => context.go('/map'),
             ),
-            TextButton(
+            const SizedBox(height: 12),
+            _MenuCard(
+              icon: Icons.settings_rounded,
+              iconColor: colorScheme.onSurfaceVariant,
+              title: 'Settings',
+              subtitle: 'Privacy & preferences',
+              onTap: () => context.go('/settings'),
+            ),
+            const SizedBox(height: 24),
+            OutlinedButton.icon(
               onPressed: () => context.go('/onboarding'),
-              child: const Text('Onboarding'),
+              icon: const Icon(Icons.info_outline_rounded, size: 20),
+              label: const Text('How it works'),
+              style: OutlinedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(vertical: 12),
+              ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class _MenuCard extends StatelessWidget {
+  const _MenuCard({
+    required this.icon,
+    required this.iconColor,
+    required this.title,
+    required this.subtitle,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final Color iconColor;
+  final String title;
+  final String subtitle;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Material(
+      color: theme.cardTheme.color,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: iconColor.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(icon, color: iconColor, size: 28),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      subtitle,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Icon(
+                Icons.chevron_right_rounded,
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ],
+          ),
         ),
       ),
     );
