@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/auth/auth_providers.dart';
+import '../../../core/widgets/app_bar_with_back.dart';
 import '../../../data/repositories/profile_repository.dart';
 
 class ProfileScreen extends ConsumerStatefulWidget {
@@ -86,20 +87,18 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     final user = ref.watch(currentUserProvider);
     final profileAsync = user != null ? ref.watch(profileProvider(user.id)) : null;
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Profile'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.logout),
-            onPressed: _signOut,
-            tooltip: 'Sign out',
-          ),
-        ],
-      ),
+      appBar: appBarWithBack(context, title: 'Profile', actions: [
+        IconButton(
+          icon: const Icon(Icons.logout_rounded),
+          onPressed: _signOut,
+          tooltip: 'Sign out',
+        ),
+      ]),
       body: user == null
           ? const Center(child: Text('Not signed in'))
           : profileAsync == null
@@ -123,7 +122,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                               controller: _displayNameController,
                               decoration: const InputDecoration(
                                 labelText: 'Display name',
-                                border: OutlineInputBorder(),
+                                prefixIcon: Icon(Icons.badge_outlined),
                               ),
                             ),
                             const SizedBox(height: 16),
@@ -131,7 +130,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                               controller: _phoneController,
                               decoration: const InputDecoration(
                                 labelText: 'Phone (optional)',
-                                border: OutlineInputBorder(),
+                                prefixIcon: Icon(Icons.phone_outlined),
                               ),
                               keyboardType: TextInputType.phone,
                             ),
@@ -140,31 +139,46 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                               controller: _schoolController,
                               decoration: const InputDecoration(
                                 labelText: 'School (optional)',
-                                border: OutlineInputBorder(),
+                                prefixIcon: Icon(Icons.school_outlined),
                               ),
                             ),
                             if (_error != null) ...[
                               const SizedBox(height: 16),
-                              Text(
-                                _error!,
-                                style: TextStyle(color: Theme.of(context).colorScheme.error),
+                              Container(
+                                padding: const EdgeInsets.all(12),
+                                decoration: BoxDecoration(
+                                  color: theme.colorScheme.errorContainer,
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Row(
+                                  children: [
+                                    Icon(Icons.error_outline_rounded,
+                                        color: theme.colorScheme.error, size: 20),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: Text(
+                                        _error!,
+                                        style: TextStyle(
+                                          color: theme.colorScheme.onErrorContainer,
+                                          fontSize: 14,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
                               ),
                             ],
                             const SizedBox(height: 24),
-                            FilledButton(
+                            FilledButton.icon(
                               onPressed: _loading ? null : _save,
-                              child: _loading
+                              icon: _loading
                                   ? const SizedBox(
                                       height: 20,
                                       width: 20,
                                       child: CircularProgressIndicator(strokeWidth: 2),
                                     )
-                                  : const Text('Save'),
-                            ),
-                            const SizedBox(height: 16),
-                            TextButton(
-                              onPressed: () => context.go('/'),
-                              child: const Text('Back to Home'),
+                                  : const Icon(Icons.check_rounded, size: 20),
+                              label: Text(_loading ? 'Saving...' : 'Save'),
                             ),
                           ],
                         ),

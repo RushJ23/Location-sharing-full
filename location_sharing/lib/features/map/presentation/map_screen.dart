@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 
 import '../../../core/auth/auth_providers.dart';
+import '../../../core/widgets/app_bar_with_back.dart';
 import '../../../data/repositories/always_share_repository.dart';
 import '../../../features/incidents/domain/incident.dart';
 import '../../../features/incidents/providers/incident_providers.dart';
@@ -24,15 +25,30 @@ class _MapScreenState extends ConsumerState<MapScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     final user = ref.watch(currentUserProvider);
     if (user == null) {
       return Scaffold(
-        appBar: AppBar(title: const Text('Map')),
-        body: const Center(child: Text('Sign in to see the map')),
+        appBar: appBarWithBack(context, title: 'Map'),
+        body: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.map_outlined, size: 48, color: theme.colorScheme.outline),
+              const SizedBox(height: 16),
+              Text(
+                'Sign in to see the map',
+                style: theme.textTheme.bodyLarge?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ],
+          ),
+        ),
       );
     }
     return Scaffold(
-      appBar: AppBar(title: const Text('Map')),
+      appBar: appBarWithBack(context, title: 'Map'),
       body: FutureBuilder<List<dynamic>>(
         future: Future.wait([
           ref.read(alwaysShareRepositoryProvider).getAlwaysShareLocations(),
@@ -51,7 +67,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
               Marker(
                 markerId: MarkerId('always_${loc.userId}'),
                 position: LatLng(loc.lat, loc.lng),
-                infoWindow: InfoWindow(title: 'Always share'),
+                infoWindow: const InfoWindow(title: 'Always share'),
               ),
             );
             cameraTarget ??= LatLng(loc.lat, loc.lng);

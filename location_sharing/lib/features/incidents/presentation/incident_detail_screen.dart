@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 
 import '../../../core/auth/auth_providers.dart';
+import '../../../core/widgets/app_bar_with_back.dart';
 import '../domain/incident.dart';
 import '../providers/incident_providers.dart';
 
@@ -14,58 +15,152 @@ class IncidentDetailScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
     final incidentAsync = ref.watch(_incidentProvider(incidentId));
     return Scaffold(
-      appBar: AppBar(title: const Text('Incident')),
+      appBar: appBarWithBack(context, title: 'Incident'),
       body: incidentAsync.when(
         data: (incident) {
           if (incident == null) {
-            return const Center(child: Text('Incident not found'));
+            return Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.warning_amber_rounded,
+                      size: 48, color: theme.colorScheme.outline),
+                  const SizedBox(height: 16),
+                  Text(
+                    'Incident not found',
+                    style: theme.textTheme.bodyLarge,
+                  ),
+                ],
+              ),
+            );
           }
           final user = ref.watch(currentUserProvider);
           final isSubject = user?.id == incident.userId;
           return ListView(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.all(20),
             children: [
-              Text('Status: ${incident.status}', style: const TextStyle(fontSize: 16)),
-              const SizedBox(height: 8),
-              Text('Trigger: ${incident.trigger}'),
-              if (incident.lastKnownLat != null && incident.lastKnownLng != null)
-                Text(
-                  'Last known: ${incident.lastKnownLat!.toStringAsFixed(4)}, '
-                  '${incident.lastKnownLng!.toStringAsFixed(4)}',
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(
+                            incident.isActive
+                                ? Icons.warning_amber_rounded
+                                : Icons.check_circle_outline_rounded,
+                            color: incident.isActive
+                                ? theme.colorScheme.tertiary
+                                : theme.colorScheme.primary,
+                            size: 28,
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Status',
+                                  style: theme.textTheme.labelMedium?.copyWith(
+                                    color: theme.colorScheme.onSurfaceVariant,
+                                  ),
+                                ),
+                                Text(
+                                  incident.status,
+                                  style: theme.textTheme.titleMedium?.copyWith(
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+                      const Divider(),
+                      const SizedBox(height: 12),
+                      _DetailRow(
+                        icon: Icons.flash_on_rounded,
+                        label: 'Trigger',
+                        value: incident.trigger,
+                      ),
+                      if (incident.lastKnownLat != null &&
+                          incident.lastKnownLng != null) ...[
+                        const SizedBox(height: 8),
+                        _DetailRow(
+                          icon: Icons.place_rounded,
+                          label: 'Last known location',
+                          value:
+                              '${incident.lastKnownLat!.toStringAsFixed(4)}, '
+                              '${incident.lastKnownLng!.toStringAsFixed(4)}',
+                        ),
+                      ],
+                    ],
+                  ),
                 ),
-              const SizedBox(height: 24),
+              ),
               if (incident.isActive && !isSubject) ...[
-                const Text('As a contact you can:', style: TextStyle(fontWeight: FontWeight.bold)),
-                const SizedBox(height: 8),
-                FilledButton(
+                const SizedBox(height: 24),
+                Text(
+                  'As a contact you can:',
+                  style: theme.textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                FilledButton.icon(
                   onPressed: () => _confirmSafe(ref),
-                  child: const Text('I confirm they\'re safe'),
+                  icon: const Icon(Icons.check_circle_rounded, size: 20),
+                  label: const Text('I confirm they\'re safe'),
+                  style: FilledButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                  ),
                 ),
                 const SizedBox(height: 8),
-                OutlinedButton(
+                OutlinedButton.icon(
                   onPressed: () => _couldNotReach(ref),
-                  child: const Text('I couldn\'t reach them'),
+                  icon: const Icon(Icons.cancel_outlined, size: 20),
+                  label: const Text('I couldn\'t reach them'),
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                  ),
                 ),
               ],
               const SizedBox(height: 24),
-              const Text('Location path (last 12h)', style: TextStyle(fontWeight: FontWeight.bold)),
+              Text(
+                'Location path (last 12h)',
+                style: theme.textTheme.titleSmall?.copyWith(
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
               const SizedBox(height: 8),
               SizedBox(
                 height: 200,
-                child: _IncidentMap(incidentId: incidentId),
-              ),
-              const SizedBox(height: 16),
-              TextButton(
-                onPressed: () => context.go('/'),
-                child: const Text('Back to Home'),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(12),
+                  child: _IncidentMap(incidentId: incidentId),
+                ),
               ),
             ],
           );
         },
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(child: Text('Error: $e')),
+        error: (e, _) => Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.error_outline_rounded,
+                  size: 48, color: Theme.of(context).colorScheme.error),
+              const SizedBox(height: 16),
+              Text('Error: $e'),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -83,6 +178,44 @@ class IncidentDetailScreen extends ConsumerWidget {
     if (user == null) return;
     await ref.read(incidentRepositoryProvider).couldNotReach(incidentId, user.id);
     ref.invalidate(_incidentProvider(incidentId));
+  }
+}
+
+class _DetailRow extends StatelessWidget {
+  const _DetailRow({
+    required this.icon,
+    required this.label,
+    required this.value,
+  });
+
+  final IconData icon;
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(icon, size: 20, color: theme.colorScheme.onSurfaceVariant),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                label,
+                style: theme.textTheme.labelSmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
+              Text(value, style: theme.textTheme.bodyMedium),
+            ],
+          ),
+        ),
+      ],
+    );
   }
 }
 
@@ -113,14 +246,16 @@ class _IncidentMap extends ConsumerWidget {
                   (e['lng'] as num).toDouble(),
                 ))
             .toList();
-        final center = points.isNotEmpty ? points[points.length ~/ 2] : const LatLng(40.44, -79.94);
+        final center = points.isNotEmpty
+            ? points[points.length ~/ 2]
+            : const LatLng(40.44, -79.94);
         return GoogleMap(
           initialCameraPosition: CameraPosition(target: center, zoom: 12),
           polylines: {
             Polyline(
               polylineId: const PolylineId('path'),
               points: points,
-              color: Colors.blue,
+              color: Theme.of(context).colorScheme.primary,
               width: 4,
             ),
           },

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/auth/auth_providers.dart';
+import '../../../core/widgets/app_bar_with_back.dart';
 import '../domain/curfew_check_service.dart';
 import '../domain/curfew_schedule.dart';
 import '../domain/safe_zone.dart';
@@ -17,29 +18,49 @@ class SafetyScreen extends ConsumerStatefulWidget {
 class _SafetyScreenState extends ConsumerState<SafetyScreen> {
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     final user = ref.watch(currentUserProvider);
     if (user == null) {
       return Scaffold(
-        appBar: AppBar(title: const Text('Safety')),
-        body: const Center(child: Text('Sign in to manage safety settings')),
+        appBar: appBarWithBack(context, title: 'Safety'),
+        body: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.shield_outlined, size: 48, color: theme.colorScheme.outline),
+              const SizedBox(height: 16),
+              Text(
+                'Sign in to manage safety settings',
+                style: theme.textTheme.bodyLarge?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ],
+          ),
+        ),
       );
     }
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Safety'),
+      appBar: appBarWithBack(
+        context,
+        title: 'Safety',
         actions: [
           IconButton(
-            icon: const Icon(Icons.notifications_active),
+            icon: const Icon(Icons.notifications_active_rounded),
             onPressed: () => _runCurfewCheck(context, user.id),
             tooltip: 'Run curfew check now',
           ),
         ],
       ),
       body: ListView(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(20),
         children: [
-          const Text('Safe zones', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 8),
+          _SectionHeader(
+            icon: Icons.place_rounded,
+            title: 'Safe zones',
+            subtitle: 'Places where you\'re considered safe',
+          ),
+          const SizedBox(height: 12),
           Consumer(
             builder: (context, ref, _) {
               final async = ref.watch(_safeZonesProvider(user.id));
@@ -47,31 +68,58 @@ class _SafetyScreenState extends ConsumerState<SafetyScreen> {
                 data: (zones) => Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    ...zones.map((z) => ListTile(
-                          title: Text(z.name),
-                          subtitle: Text(
-                            '${z.centerLat.toStringAsFixed(4)}, ${z.centerLng.toStringAsFixed(4)} · ${z.radiusMeters.toStringAsFixed(0)} m',
-                          ),
-                          trailing: IconButton(
-                            icon: const Icon(Icons.delete_outline),
-                            onPressed: () => _deleteSafeZone(ref, z),
+                    ...zones.map((z) => Card(
+                          child: ListTile(
+                            leading: CircleAvatar(
+                              backgroundColor: theme.colorScheme.primaryContainer,
+                              child: Icon(
+                                Icons.home_rounded,
+                                color: theme.colorScheme.onPrimaryContainer,
+                                size: 22,
+                              ),
+                            ),
+                            title: Text(z.name),
+                            subtitle: Text(
+                              '${z.centerLat.toStringAsFixed(4)}, ${z.centerLng.toStringAsFixed(4)} · ${z.radiusMeters.toStringAsFixed(0)} m',
+                              style: theme.textTheme.bodySmall,
+                            ),
+                            trailing: IconButton(
+                              icon: const Icon(Icons.delete_outline_rounded),
+                              onPressed: () => _deleteSafeZone(ref, z),
+                              tooltip: 'Remove zone',
+                            ),
                           ),
                         )),
-                    TextButton.icon(
+                    const SizedBox(height: 8),
+                    FilledButton.tonal(
                       onPressed: () => _addSafeZone(context, ref, user.id),
-                      icon: const Icon(Icons.add),
-                      label: const Text('Add safe zone'),
+                      child: const Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.add_rounded, size: 20),
+                          SizedBox(width: 8),
+                          Text('Add safe zone'),
+                        ],
+                      ),
                     ),
                   ],
                 ),
-                loading: () => const Center(child: CircularProgressIndicator()),
-                error: (e, _) => Text('Error: $e'),
+                loading: () => const Center(
+                    child: Padding(
+                        padding: EdgeInsets.all(24),
+                        child: CircularProgressIndicator())),
+                error: (e, _) => Text('Error: $e',
+                    style: TextStyle(color: theme.colorScheme.error)),
               );
             },
           ),
-          const SizedBox(height: 24),
-          const Text('Curfew schedules', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 8),
+          const SizedBox(height: 28),
+          _SectionHeader(
+            icon: Icons.schedule_rounded,
+            title: 'Curfew schedules',
+            subtitle: 'When to run "Are you safe?" checks',
+          ),
+          const SizedBox(height: 12),
           Consumer(
             builder: (context, ref, _) {
               final async = ref.watch(_curfewSchedulesProvider(user.id));
@@ -79,25 +127,48 @@ class _SafetyScreenState extends ConsumerState<SafetyScreen> {
                 data: (schedules) => Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    ...schedules.map((s) => ListTile(
-                          title: Text('${s.timeLocal} (${s.timezone})'),
-                          subtitle: Text(
-                            'Safe zones: ${s.safeZoneIds.length} · Timeout: ${s.responseTimeoutMinutes} min',
-                          ),
-                          trailing: IconButton(
-                            icon: const Icon(Icons.delete_outline),
-                            onPressed: () => _deleteCurfew(ref, s),
+                    ...schedules.map((s) => Card(
+                          child: ListTile(
+                            leading: CircleAvatar(
+                              backgroundColor: theme.colorScheme.tertiaryContainer,
+                              child: Icon(
+                                Icons.nightlight_round,
+                                color: theme.colorScheme.onTertiaryContainer,
+                                size: 22,
+                              ),
+                            ),
+                            title: Text('${s.timeLocal} (${s.timezone})'),
+                            subtitle: Text(
+                              'Safe zones: ${s.safeZoneIds.length} · Timeout: ${s.responseTimeoutMinutes} min',
+                              style: theme.textTheme.bodySmall,
+                            ),
+                            trailing: IconButton(
+                              icon: const Icon(Icons.delete_outline_rounded),
+                              onPressed: () => _deleteCurfew(ref, s),
+                              tooltip: 'Remove curfew',
+                            ),
                           ),
                         )),
-                    TextButton.icon(
+                    const SizedBox(height: 8),
+                    FilledButton.tonal(
                       onPressed: () => _addCurfew(context, ref, user.id),
-                      icon: const Icon(Icons.add),
-                      label: const Text('Add curfew'),
+                      child: const Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.add_rounded, size: 20),
+                          SizedBox(width: 8),
+                          Text('Add curfew'),
+                        ],
+                      ),
                     ),
                   ],
                 ),
-                loading: () => const Center(child: CircularProgressIndicator()),
-                error: (e, _) => Text('Error: $e'),
+                loading: () => const Center(
+                    child: Padding(
+                        padding: EdgeInsets.all(24),
+                        child: CircularProgressIndicator())),
+                error: (e, _) => Text('Error: $e',
+                    style: TextStyle(color: theme.colorScheme.error)),
               );
             },
           ),
@@ -126,8 +197,6 @@ class _SafetyScreenState extends ConsumerState<SafetyScreen> {
   }
 
   Future<void> _addSafeZone(BuildContext context, WidgetRef ref, String userId) async {
-    // Minimal: navigate to a simple add screen or show dialog with name, lat, lng, radius.
-    // For now show a snackbar that add is not fully implemented (or implement a dialog).
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('Use map or settings to add safe zone with location')),
     );
@@ -168,6 +237,50 @@ class _SafetyScreenState extends ConsumerState<SafetyScreen> {
   Future<void> _deleteCurfew(WidgetRef ref, CurfewSchedule s) async {
     await ref.read(curfewRepositoryProvider).deleteCurfewSchedule(s.id);
     ref.invalidate(_curfewSchedulesProvider(s.userId));
+  }
+}
+
+class _SectionHeader extends StatelessWidget {
+  const _SectionHeader({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+  });
+
+  final IconData icon;
+  final String title;
+  final String subtitle;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(icon, size: 24, color: theme.colorScheme.primary),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                title,
+                style: theme.textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                subtitle,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
   }
 }
 
