@@ -22,6 +22,29 @@ class _MapScreenState extends ConsumerState<MapScreen> {
   static const LatLng _defaultCenter = LatLng(40.44, -79.94);
 
   @override
+  void initState() {
+    super.initState();
+    // Refresh map data and safe zones every time the user opens the map.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final user = ref.read(currentUserProvider);
+      if (user != null) {
+        ref.invalidate(mapDataProvider);
+        ref.invalidate(userSafeZonesProvider(user.id));
+      }
+    });
+  }
+
+  Future<void> _zoomIn() async {
+    final controller = await _mapController.future;
+    await controller.animateCamera(CameraUpdate.zoomIn());
+  }
+
+  Future<void> _zoomOut() async {
+    final controller = await _mapController.future;
+    await controller.animateCamera(CameraUpdate.zoomOut());
+  }
+
+  @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final user = ref.watch(currentUserProvider);
@@ -151,6 +174,33 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                 ),
               ),
             ),
+          // Zoom controls (work in simulator and when pinch is awkward)
+          Positioned(
+            right: 16,
+            bottom: 100,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Material(
+                  elevation: 2,
+                  child: IconButton(
+                    icon: const Icon(Icons.add),
+                    onPressed: _zoomIn,
+                    tooltip: 'Zoom in',
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Material(
+                  elevation: 2,
+                  child: IconButton(
+                    icon: const Icon(Icons.remove),
+                    onPressed: _zoomOut,
+                    tooltip: 'Zoom out',
+                  ),
+                ),
+              ],
+            ),
+          ),
         ],
       ),
     );

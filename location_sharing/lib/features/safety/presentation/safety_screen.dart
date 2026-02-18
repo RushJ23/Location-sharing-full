@@ -176,12 +176,24 @@ class _SafetyScreenState extends ConsumerState<SafetyScreen> {
           const SizedBox(height: 12),
           Consumer(
             builder: (context, ref, _) {
+              final zonesAsync = ref.watch(_safeZonesProvider(user.id));
               final async = ref.watch(_curfewSchedulesProvider(user.id));
               return async.when(
-                data: (schedules) => Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    ...schedules.map((s) => Card(
+                data: (schedules) {
+                  final zones = zonesAsync.valueOrNull ?? [];
+                  final zoneNames = {for (final z in zones) z.id: z.name};
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      ...schedules.map((s) {
+                        final names = s.safeZoneIds
+                            .map((id) => zoneNames[id] ?? 'Unknown')
+                            .where((n) => n != 'Unknown')
+                            .toList();
+                        final zoneSummary = names.isEmpty
+                            ? 'No zones'
+                            : (names.length <= 2 ? names.join(', ') : '${names.length} zones');
+                        return Card(
                           child: ListTile(
                             leading: CircleAvatar(
                               backgroundColor: theme.colorScheme.tertiaryContainer,
@@ -191,18 +203,40 @@ class _SafetyScreenState extends ConsumerState<SafetyScreen> {
                                 size: 22,
                               ),
                             ),
-                            title: Text('${s.timeLocal} (${s.timezone})'),
+                            title: Text('${s.timeLocal} ${s.timezone}'),
                             subtitle: Text(
-                              'Safe zones: ${s.safeZoneIds.length} · Timeout: ${s.responseTimeoutMinutes} min',
+                              '$zoneSummary · Timeout: ${s.responseTimeoutMinutes} min${s.enabled ? '' : ' · Disabled'}',
                               style: theme.textTheme.bodySmall,
                             ),
-                            trailing: IconButton(
-                              icon: const Icon(Icons.delete_outline_rounded),
-                              onPressed: () => _deleteCurfew(ref, s),
-                              tooltip: 'Remove curfew',
+                            trailing: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                IconButton(
+                                  icon: const Icon(Icons.edit_outlined),
+                                  onPressed: () async {
+                                    final z = await ref.read(safeZoneRepositoryProvider).getSafeZones(user.id);
+                                    if (context.mounted) {
+                                      _editCurfew(context, ref, user.id, s, z);
+                                    }
+                                  },
+                                  tooltip: 'Edit curfew',
+                                ),
+                                IconButton(
+                                  icon: const Icon(Icons.delete_outline_rounded),
+                                  onPressed: () => _deleteCurfew(ref, s),
+                                  tooltip: 'Remove curfew',
+                                ),
+                              ],
                             ),
+                            onTap: () async {
+                              final z = await ref.read(safeZoneRepositoryProvider).getSafeZones(user.id);
+                              if (context.mounted) {
+                                _editCurfew(context, ref, user.id, s, z);
+                              }
+                            },
                           ),
-                        )),
+                        );
+                      }),
                     const SizedBox(height: 8),
                     FilledButton.tonal(
                       onPressed: () => _addCurfew(context, ref, user.id),
@@ -215,8 +249,9 @@ class _SafetyScreenState extends ConsumerState<SafetyScreen> {
                         ],
                       ),
                     ),
-                  ],
-                ),
+                    ],
+                  );
+                },
                 loading: () => const Center(
                     child: Padding(
                         padding: EdgeInsets.all(24),
@@ -395,7 +430,9 @@ class _SafetyScreenState extends ConsumerState<SafetyScreen> {
 
   Future<void> _deleteSafeZone(WidgetRef ref, SafeZone zone) async {
     await ref.read(safeZoneRepositoryProvider).deleteSafeZone(zone.id);
+    await ref.read(curfewRepositoryProvider).removeSafeZoneFromAllSchedules(zone.userId, zone.id);
     ref.invalidate(_safeZonesProvider(zone.userId));
+    ref.invalidate(_curfewSchedulesProvider(zone.userId));
   }
 
   Future<void> _addCurfew(BuildContext context, WidgetRef ref, String userId) async {
@@ -409,12 +446,21 @@ class _SafetyScreenState extends ConsumerState<SafetyScreen> {
       }
       return;
     }
+    if (!context.mounted) return;
+    final result = await _showCurfewEditor(
+      context,
+      zones: zones,
+      existing: null,
+    );
+    if (result == null || !context.mounted) return;
     try {
       await ref.read(curfewRepositoryProvider).insertCurfewSchedule(
             userId: userId,
-            safeZoneIds: zones.map((z) => z.id).toList(),
-            timeLocal: '23:30',
-            timezone: 'America/New_York',
+            safeZoneIds: result.safeZoneIds,
+            timeLocal: result.timeLocal,
+            timezone: result.timezone,
+            responseTimeoutMinutes: result.responseTimeoutMinutes,
+            enabled: result.enabled,
           );
       if (!context.mounted) return;
       ref.invalidate(_curfewSchedulesProvider(userId));
@@ -425,10 +471,268 @@ class _SafetyScreenState extends ConsumerState<SafetyScreen> {
     }
   }
 
+  Future<void> _editCurfew(
+    BuildContext context,
+    WidgetRef ref,
+    String userId,
+    CurfewSchedule schedule,
+    List<SafeZone> zones,
+  ) async {
+    final result = await _showCurfewEditor(
+      context,
+      zones: zones,
+      existing: schedule,
+    );
+    if (result == null || !context.mounted) return;
+    try {
+      await ref.read(curfewRepositoryProvider).updateCurfewSchedule(
+            CurfewSchedule(
+              id: schedule.id,
+              userId: schedule.userId,
+              safeZoneIds: result.safeZoneIds,
+              timeLocal: result.timeLocal,
+              timezone: result.timezone,
+              enabled: result.enabled,
+              responseTimeoutMinutes: result.responseTimeoutMinutes,
+              createdAt: schedule.createdAt,
+              updatedAt: schedule.updatedAt,
+            ),
+          );
+      if (!context.mounted) return;
+      ref.invalidate(_curfewSchedulesProvider(userId));
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Curfew updated')));
+    } catch (e) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
+    }
+  }
+
   Future<void> _deleteCurfew(WidgetRef ref, CurfewSchedule s) async {
     await ref.read(curfewRepositoryProvider).deleteCurfewSchedule(s.id);
     ref.invalidate(_curfewSchedulesProvider(s.userId));
   }
+}
+
+class _CurfewEditorResult {
+  const _CurfewEditorResult({
+    required this.safeZoneIds,
+    required this.timeLocal,
+    required this.timezone,
+    required this.responseTimeoutMinutes,
+    required this.enabled,
+  });
+  final List<String> safeZoneIds;
+  final String timeLocal;
+  final String timezone;
+  final int responseTimeoutMinutes;
+  final bool enabled;
+}
+
+Future<_CurfewEditorResult?> _showCurfewEditor(
+  BuildContext context, {
+  required List<SafeZone> zones,
+  CurfewSchedule? existing,
+}) async {
+  assert(zones.isNotEmpty);
+  // Parse existing time "HH:mm" or "23:30:00"
+  TimeOfDay initialTime = const TimeOfDay(hour: 23, minute: 30);
+  if (existing != null && existing.timeLocal.isNotEmpty) {
+    final parts = existing.timeLocal.split(':');
+    if (parts.length >= 2) {
+      final h = int.tryParse(parts[0]);
+      final m = int.tryParse(parts[1]);
+      if (h != null && m != null && h >= 0 && h < 24 && m >= 0 && m < 60) {
+        initialTime = TimeOfDay(hour: h, minute: m);
+      }
+    }
+  }
+  final selectedIds = <String>{...(existing?.safeZoneIds ?? [])};
+  if (existing == null) {
+    // New curfew: select all zones by default
+    for (final z in zones) {
+      selectedIds.add(z.id);
+    }
+  }
+  final timeController = TextEditingController(
+    text: '${initialTime.hour.toString().padLeft(2, '0')}:${initialTime.minute.toString().padLeft(2, '0')}',
+  );
+  const defaultTimezones = [
+    'America/New_York',
+    'America/Chicago',
+    'America/Denver',
+    'America/Los_Angeles',
+    'America/Toronto',
+    'Europe/London',
+    'Europe/Paris',
+    'Asia/Kolkata',
+    'UTC',
+  ];
+  var initialTz = existing?.timezone ?? 'America/New_York';
+  if (!defaultTimezones.contains(initialTz)) initialTz = defaultTimezones.first;
+  final selectedTimezoneHolder = [initialTz];
+  final timeoutController = TextEditingController(
+    text: '${existing?.responseTimeoutMinutes ?? 10}',
+  );
+  bool enabled = existing?.enabled ?? true;
+
+  final result = await showDialog<_CurfewEditorResult>(
+    context: context,
+    builder: (ctx) {
+      return StatefulBuilder(
+        builder: (context, setState) {
+          return AlertDialog(
+            title: Text(existing == null ? 'Add curfew' : 'Edit curfew'),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text(
+                    'Which safe zones apply?',
+                    style: Theme.of(ctx).textTheme.titleSmall,
+                  ),
+                  const SizedBox(height: 8),
+                  ...zones.map((z) => CheckboxListTile(
+                        value: selectedIds.contains(z.id),
+                        onChanged: (v) {
+                          setState(() {
+                            if (v == true) {
+                              selectedIds.add(z.id);
+                            } else {
+                              selectedIds.remove(z.id);
+                            }
+                          });
+                        },
+                        title: Text(z.name),
+                        contentPadding: EdgeInsets.zero,
+                        controlAffinity: ListTileControlAffinity.leading,
+                      )),
+                  const SizedBox(height: 16),
+                  Text(
+                    'Be in location by (local time)',
+                    style: Theme.of(ctx).textTheme.titleSmall,
+                  ),
+                  const SizedBox(height: 8),
+                  TextField(
+                    controller: timeController,
+                    decoration: const InputDecoration(
+                      hintText: 'e.g. 23:30',
+                      helperText: '24-hour format HH:mm',
+                    ),
+                    keyboardType: const TextInputType.numberWithOptions(signed: false),
+                    onTap: () async {
+                      final picked = await showTimePicker(
+                        context: ctx,
+                        initialTime: TimeOfDay(
+                          hour: int.tryParse(timeController.text.split(':').first) ?? 23,
+                          minute: int.tryParse(timeController.text.split(':').elementAtOrNull(1)?.substring(0, 2) ?? '') ?? 30,
+                        ),
+                      );
+                      if (picked != null) {
+                        timeController.text =
+                            '${picked.hour.toString().padLeft(2, '0')}:${picked.minute.toString().padLeft(2, '0')}';
+                        setState(() {});
+                      }
+                    },
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    'Timezone (IANA)',
+                    style: Theme.of(ctx).textTheme.titleSmall,
+                  ),
+                  const SizedBox(height: 8),
+                  DropdownButtonFormField<String>(
+                    value: defaultTimezones.contains(selectedTimezoneHolder[0])
+                        ? selectedTimezoneHolder[0]
+                        : defaultTimezones.first,
+                    decoration: const InputDecoration(
+                      hintText: 'e.g. America/New_York',
+                    ),
+                    items: defaultTimezones
+                        .map((tz) => DropdownMenuItem(value: tz, child: Text(tz)))
+                        .toList(),
+                    onChanged: (v) {
+                      if (v != null) {
+                        selectedTimezoneHolder[0] = v;
+                        setState(() {});
+                      }
+                    },
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: timeoutController,
+                    decoration: const InputDecoration(
+                      labelText: 'Response timeout (minutes)',
+                      hintText: 'e.g. 10',
+                    ),
+                    keyboardType: TextInputType.number,
+                  ),
+                  const SizedBox(height: 12),
+                  SwitchListTile(
+                    value: enabled,
+                    onChanged: (v) => setState(() => enabled = v),
+                    title: const Text('Enabled'),
+                    contentPadding: EdgeInsets.zero,
+                    controlAffinity: ListTileControlAffinity.leading,
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(ctx).pop(),
+                child: const Text('Cancel'),
+              ),
+              FilledButton(
+                onPressed: () {
+                  if (selectedIds.isEmpty) {
+                    ScaffoldMessenger.of(ctx).showSnackBar(
+                      const SnackBar(content: Text('Select at least one safe zone')),
+                    );
+                    return;
+                  }
+                  final timeStr = timeController.text.trim();
+                  final timeMatch = RegExp(r'^(\d{1,2}):(\d{2})$').firstMatch(timeStr);
+                  if (timeMatch == null) {
+                    ScaffoldMessenger.of(ctx).showSnackBar(
+                      const SnackBar(content: Text('Enter time as HH:mm (e.g. 23:30)')),
+                    );
+                    return;
+                  }
+                  final hour = int.parse(timeMatch.group(1)!);
+                  final minute = int.parse(timeMatch.group(2)!);
+                  if (hour < 0 || hour > 23 || minute < 0 || minute > 59) {
+                    ScaffoldMessenger.of(ctx).showSnackBar(
+                      const SnackBar(content: Text('Enter a valid time')),
+                    );
+                    return;
+                  }
+                  final timeLocal =
+                      '${hour.toString().padLeft(2, '0')}:${minute.toString().padLeft(2, '0')}';
+                  final timeout = int.tryParse(timeoutController.text);
+                  if (timeout == null || timeout < 1 || timeout > 120) {
+                    ScaffoldMessenger.of(ctx).showSnackBar(
+                      const SnackBar(content: Text('Enter timeout between 1 and 120 minutes')),
+                    );
+                    return;
+                  }
+                  Navigator.of(ctx).pop(_CurfewEditorResult(
+                    safeZoneIds: selectedIds.toList(),
+                    timeLocal: timeLocal,
+                    timezone: selectedTimezoneHolder[0],
+                    responseTimeoutMinutes: timeout,
+                    enabled: enabled,
+                  ));
+                },
+                child: const Text('Save'),
+              ),
+            ],
+          );
+        },
+      );
+    },
+  );
+  return result;
 }
 
 class _SectionHeader extends StatelessWidget {

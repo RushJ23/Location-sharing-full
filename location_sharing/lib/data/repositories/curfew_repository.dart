@@ -57,4 +57,27 @@ class CurfewRepository {
     if (_client == null) return;
     await _client.from('curfew_schedules').delete().eq('id', id);
   }
+
+  /// Removes a safe zone id from all curfew schedules for the user.
+  /// Call this when a safe zone is deleted so curfews stay in sync.
+  Future<void> removeSafeZoneFromAllSchedules(String userId, String safeZoneId) async {
+    if (_client == null) return;
+    final schedules = await getCurfewSchedules(userId);
+    for (final s in schedules) {
+      final updated = s.safeZoneIds.where((id) => id != safeZoneId).toList();
+      if (updated.length != s.safeZoneIds.length) {
+        await updateCurfewSchedule(CurfewSchedule(
+          id: s.id,
+          userId: s.userId,
+          safeZoneIds: updated,
+          timeLocal: s.timeLocal,
+          timezone: s.timezone,
+          enabled: s.enabled,
+          responseTimeoutMinutes: s.responseTimeoutMinutes,
+          createdAt: s.createdAt,
+          updatedAt: s.updatedAt,
+        ));
+      }
+    }
+  }
 }

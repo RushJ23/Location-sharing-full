@@ -57,7 +57,7 @@ class ContactRequestRepository {
     final res = await _client
         .from('profiles')
         .select('id, display_name')
-        .in_('id', userIds);
+        .inFilter('id', userIds);
     final map = <String, String>{};
     for (final row in res as List) {
       final m = row as Map<String, dynamic>;
