@@ -1,3 +1,6 @@
+import 'dart:async';
+
+import 'package:app_links/app_links.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
@@ -12,6 +15,17 @@ import 'core/theme/app_theme.dart';
 import 'features/safety/domain/safety_notification_service.dart';
 import 'features/safety/providers/location_providers.dart';
 
+/// Handles auth callback deep link (e.g. email confirmation). Uses Supabase
+/// auth's getSessionFromUrl to parse the link and establish the session.
+Future<void> _handleAuthDeepLink(Uri uri) async {
+  if (AppEnv.supabaseUrl.isEmpty) return;
+  try {
+    await Supabase.instance.client.auth.getSessionFromUrl(uri);
+  } catch (_) {
+    // Ignore invalid/expired link
+  }
+}
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   try {
@@ -24,6 +38,24 @@ void main() async {
       url: AppEnv.supabaseUrl,
       anonKey: AppEnv.supabaseAnonKey,
     );
+    // Handle auth callback when app is opened from email link (cold start).
+    final appLinks = AppLinks();
+    final initialUri = await appLinks.getInitialLink();
+    if (initialUri != null &&
+        initialUri.scheme == 'location-sharing' &&
+        initialUri.pathSegments.isNotEmpty &&
+        initialUri.pathSegments.first == 'auth') {
+      unawaited(_handleAuthDeepLink(initialUri));
+    }
+    // Handle auth callback when app is in background and user taps link.
+    appLinks.uriLinkStream.listen((Uri? uri) {
+      if (uri != null &&
+          uri.scheme == 'location-sharing' &&
+          uri.pathSegments.isNotEmpty &&
+          uri.pathSegments.first == 'auth') {
+        _handleAuthDeepLink(uri);
+      }
+    });
   }
   final safetyNotifications = SafetyNotificationService();
   await safetyNotifications.initialize();

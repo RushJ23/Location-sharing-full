@@ -74,5 +74,18 @@
 	<array>
 		<string>location</string>
 	</array>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>location-sharing</string>
+			</array>
+			<key>CFBundleURLName</key>
+			<string>Auth callback</string>
+		</dict>
+	</array>
 </dict>
 </plist>

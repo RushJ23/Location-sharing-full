@@ -17,12 +17,14 @@ class AuthRepository {
     required String email,
     required String password,
     String? displayName,
+    String? emailRedirectTo,
   }) async {
     if (_client == null) throw StateError('Backend not configured');
     return _client.auth.signUp(
       email: email,
       password: password,
       data: displayName != null ? {'display_name': displayName} : null,
+      emailRedirectTo: emailRedirectTo,
     );
   }
 

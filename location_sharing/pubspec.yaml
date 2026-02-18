@@ -46,6 +46,7 @@ dependencies:
   supabase_flutter: ^2.8.0
   gotrue: ^2.8.0
   flutter_dotenv: ^5.2.1
+  app_links: ^6.4.0
 
   # Location (Phase 3)
   geolocator: ^13.0.2

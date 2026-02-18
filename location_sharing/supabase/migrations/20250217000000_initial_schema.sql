@@ -109,6 +109,27 @@ CREATE TABLE IF NOT EXISTS public.incidents (
   resolved_by uuid REFERENCES auth.users(id)
 );
 
+-- Incident access (must exist before policies on incidents that reference it)
+CREATE TABLE IF NOT EXISTS public.incident_access (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  incident_id uuid NOT NULL REFERENCES public.incidents(id) ON DELETE CASCADE,
+  contact_user_id uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  layer int NOT NULL CHECK (layer IN (1, 2, 3)),
+  notified_at timestamptz,
+  confirmed_safe_at timestamptz,
+  could_not_reach_at timestamptz,
+  UNIQUE(incident_id, contact_user_id)
+);
+
+-- Incident location history
+CREATE TABLE IF NOT EXISTS public.incident_location_history (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  incident_id uuid NOT NULL REFERENCES public.incidents(id) ON DELETE CASCADE,
+  lat double precision NOT NULL,
+  lng double precision NOT NULL,
+  timestamp timestamptz NOT NULL
+);
+
 ALTER TABLE public.incidents ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY "Users can read own incidents" ON public.incidents
@@ -128,18 +149,6 @@ CREATE POLICY "Subject or contacts can update incident" ON public.incidents
     EXISTS (SELECT 1 FROM public.incident_access ia WHERE ia.incident_id = incidents.id AND ia.contact_user_id = auth.uid())
   );
 
--- Incident access
-CREATE TABLE IF NOT EXISTS public.incident_access (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  incident_id uuid NOT NULL REFERENCES public.incidents(id) ON DELETE CASCADE,
-  contact_user_id uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
-  layer int NOT NULL CHECK (layer IN (1, 2, 3)),
-  notified_at timestamptz,
-  confirmed_safe_at timestamptz,
-  could_not_reach_at timestamptz,
-  UNIQUE(incident_id, contact_user_id)
-);
-
 ALTER TABLE public.incident_access ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY "Subject or contact can read incident_access" ON public.incident_access
@@ -152,15 +161,6 @@ CREATE POLICY "Service role or subject can manage incident_access" ON public.inc
   FOR ALL USING (
     EXISTS (SELECT 1 FROM public.incidents i WHERE i.id = incident_id AND i.user_id = auth.uid())
   );
-
--- Incident location history
-CREATE TABLE IF NOT EXISTS public.incident_location_history (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  incident_id uuid NOT NULL REFERENCES public.incidents(id) ON DELETE CASCADE,
-  lat double precision NOT NULL,
-  lng double precision NOT NULL,
-  timestamp timestamptz NOT NULL
-);
 
 ALTER TABLE public.incident_location_history ENABLE ROW LEVEL SECURITY;
 
