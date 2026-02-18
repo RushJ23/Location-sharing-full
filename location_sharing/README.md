@@ -48,18 +48,11 @@ This is implemented in the escalation Edge Function and documented in code comme
    - **Option A** – SQL Editor: In Supabase Dashboard → **SQL Editor**, paste and run the contents of `supabase/migrations/20250217000000_initial_schema.sql`.
    - **Option B** – CLI: Install [Supabase CLI](https://supabase.com/docs/guides/cli), then from the project root run `supabase link --project-ref <your-project-ref>` and `supabase db push` to apply migrations.
 
-4. **Google Maps**:
-   - Android: add API key in `android/app/src/main/AndroidManifest.xml` (see [Google Maps Flutter](https://pub.dev/packages/google_maps_flutter)).
-   - iOS: add key in `ios/Runner/AppDelegate.swift` and `Info.plist` (e.g. `GMSServices.provideAPIKey`).
+4. **Google Maps**: Add `GOOGLE_MAPS_API_KEY` to your `.env.local` (see step 2). The Android and iOS builds read it from that file automatically; no need to edit the manifest or AppDelegate by hand.
 
-5. **Google Maps**: Add your API key so the map screen works.
-   - Android: in `android/app/src/main/AndroidManifest.xml` inside `<application>` add:
-     `<meta-data android:name="com.google.android.geo.API_KEY" android:value="YOUR_ANDROID_KEY"/>`
-   - iOS: in `ios/Runner/AppDelegate.swift` call `GMSServices.provideAPIKey("YOUR_IOS_KEY")` and add the key to `Info.plist` as `GMSServicesProviderAPIKey`.
+5. **Firebase (optional, for push)**: Run `flutterfire configure` to generate `lib/firebase_options.dart`. Then in `main.dart` call `await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);` before other init. FCM token is saved to Supabase when the user is signed in.
 
-6. **Firebase (optional, for push)**: Run `flutterfire configure` to generate `lib/firebase_options.dart`. Then in `main.dart` call `await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);` before other init. FCM token is saved to Supabase when the user is signed in.
-
-7. **Permissions** (see below) must be declared for location and background execution.
+6. **Permissions** (see below) must be declared for location and background execution.
 
 ### Run
 

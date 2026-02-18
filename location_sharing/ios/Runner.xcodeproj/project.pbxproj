@@ -17,6 +17,7 @@
 		97C146FC1CF9000F007C117D /* Main.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 97C146FA1CF9000F007C117D /* Main.storyboard */; };
 		97C146FE1CF9000F007C117D /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 97C146FD1CF9000F007C117D /* Assets.xcassets */; };
 		97C147011CF9000F007C117D /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 97C146FF1CF9000F007C117D /* LaunchScreen.storyboard */; };
+		A1B2C3D41E5F6789012345678 /* GeneratedMapsKey.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D41E5F6789012345679 /* GeneratedMapsKey.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -62,6 +63,7 @@
 		97C146FD1CF9000F007C117D /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		97C147001CF9000F007C117D /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = Base.lproj/LaunchScreen.storyboard; sourceTree = "<group>"; };
 		97C147021CF9000F007C117D /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		A1B2C3D41E5F6789012345679 /* GeneratedMapsKey.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GeneratedMapsKey.swift; sourceTree = "<group>"; };
 		A58C426B226DCFD1ED273DDF /* Pods-Runner.profile.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Runner.profile.xcconfig"; path = "Target Support Files/Pods-Runner/Pods-Runner.profile.xcconfig"; sourceTree = "<group>"; };
 		C857D4622361126544203DAB /* Pods-RunnerTests.profile.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-RunnerTests.profile.xcconfig"; path = "Target Support Files/Pods-RunnerTests/Pods-RunnerTests.profile.xcconfig"; sourceTree = "<group>"; };
 		CC225E62CF40F9F9216507EC /* Pods_RunnerTests.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Pods_RunnerTests.framework; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -163,6 +165,7 @@
 				1498D2331E8E89220040F4C2 /* GeneratedPluginRegistrant.m */,
 				74858FAE1ED2DC5600515810 /* AppDelegate.swift */,
 				7884E8672EC3CC0400C636F2 /* SceneDelegate.swift */,
+				A1B2C3D41E5F6789012345679 /* GeneratedMapsKey.swift */,
 				74858FAD1ED2DC5600515810 /* Runner-Bridging-Header.h */,
 			);
 			path = Runner;
@@ -195,6 +198,7 @@
 			buildConfigurationList = 97C147051CF9000F007C117D /* Build configuration list for PBXNativeTarget "Runner" */;
 			buildPhases = (
 				9791E9DDC19B43E20587D39B /* [CP] Check Pods Manifest.lock */,
+				B2C3D4E5F6A7890123456780 /* Inject Google Maps API Key */,
 				9740EEB61CF901F6004384FC /* Run Script */,
 				97C146EA1CF9000F007C117D /* Sources */,
 				97C146EB1CF9000F007C117D /* Frameworks */,
@@ -274,6 +278,22 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXShellScriptBuildPhase section */
+		B2C3D4E5F6A7890123456780 /* Inject Google Maps API Key */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputPaths = (
+				"${SRCROOT}/../.env.local",
+			);
+			name = "Inject Google Maps API Key";
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "ENV_FILE=\"${SRCROOT}/../.env.local\"\nif [ -f \"$ENV_FILE\" ]; then\n  KEY=$(grep -E \"^GOOGLE_MAPS_API_KEY=\" \"$ENV_FILE\" | cut -d= -f2- | tr -d '\\r' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')\nelse\n  KEY=\"\"\nfi\n# Escape double quotes for Swift\nESCAPED=$(echo \"$KEY\" | sed 's/\\\\/\\\\\\\\/g; s/\"/\\\\\"/g')\nOUT=\"${SRCROOT}/Runner/GeneratedMapsKey.swift\"\necho \"import Foundation\" > \"$OUT\"\necho \"\" >> \"$OUT\"\necho \"/// Generated at build time from .env.local GOOGLE_MAPS_API_KEY. Do not edit.\" >> \"$OUT\"\necho \"enum GeneratedMapsKey {\" >> \"$OUT\"\necho \"    static let googleMaps = \\\"$ESCAPED\\\"\" >> \"$OUT\"\necho \"}\" >> \"$OUT\"\n";
+			showEnvVarsInLog = 0;
+		};
 		0AFE80BD82D43D7665F9BE78 /* [CP] Copy Pods Resources */ = {
 			isa = PBXShellScriptBuildPhase;
 			buildActionMask = 2147483647;
@@ -401,6 +421,7 @@
 				74858FAF1ED2DC5600515810 /* AppDelegate.swift in Sources */,
 				1498D2341E8E89220040F4C2 /* GeneratedPluginRegistrant.m in Sources */,
 				7884E8682EC3CC0700C636F2 /* SceneDelegate.swift in Sources */,
+				A1B2C3D41E5F6789012345678 /* GeneratedMapsKey.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

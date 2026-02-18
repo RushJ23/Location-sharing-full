@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 import '../../../core/auth/auth_providers.dart';
 import '../../../core/widgets/app_bar_with_back.dart';
@@ -8,6 +9,58 @@ import '../domain/curfew_check_service.dart';
 import '../domain/curfew_schedule.dart';
 import '../domain/safe_zone.dart';
 import '../providers/location_providers.dart';
+
+/// Ensures location service is on and permission granted, then gets current position.
+/// Returns null and shows a message if location is disabled or permission denied.
+Future<Position?> _ensureLocationAndGetCurrent(BuildContext context) async {
+  final enabled = await Geolocator.isLocationServiceEnabled();
+  if (!enabled) {
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Location is off. Turn it on in device settings to use your current location.'),
+        ),
+      );
+      await Geolocator.openLocationSettings();
+    }
+    return null;
+  }
+  var permission = await Geolocator.checkPermission();
+  if (permission == LocationPermission.denied) {
+    permission = await Geolocator.requestPermission();
+  }
+  if (permission == LocationPermission.deniedForever) {
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Location permission was permanently denied. Open app settings to allow location.'),
+        ),
+      );
+      await openAppSettings();
+    }
+    return null;
+  }
+  if (permission != LocationPermission.whileInUse && permission != LocationPermission.always) {
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Location permission is required to use your current position.')),
+      );
+    }
+    return null;
+  }
+  try {
+    return await Geolocator.getCurrentPosition(
+      locationSettings: const LocationSettings(accuracy: LocationAccuracy.medium),
+    );
+  } catch (_) {
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not get location. Try again or enter coordinates manually.')),
+      );
+    }
+    return null;
+  }
+}
 
 class SafetyScreen extends ConsumerStatefulWidget {
   const SafetyScreen({super.key});
@@ -266,22 +319,11 @@ class _SafetyScreenState extends ConsumerState<SafetyScreen> {
                 FilledButton(
                   onPressed: () async {
                     if (useCurrentLocation) {
-                      try {
-                        final pos = await Geolocator.getCurrentPosition(
-                          locationSettings: const LocationSettings(
-                            accuracy: LocationAccuracy.medium,
-                          ),
-                        );
+                      final pos = await _ensureLocationAndGetCurrent(ctx);
+                      if (pos == null) return;
+                      if (ctx.mounted) {
                         latController.text = pos.latitude.toString();
                         lngController.text = pos.longitude.toString();
-                      } catch (_) {
-                        if (ctx.mounted) {
-                          ScaffoldMessenger.of(ctx).showSnackBar(
-                            const SnackBar(
-                                content: Text('Could not get location. Enable location or enter coordinates.')),
-                          );
-                        }
-                        return;
                       }
                     }
                     final name = nameController.text.trim();
@@ -323,20 +365,10 @@ class _SafetyScreenState extends ConsumerState<SafetyScreen> {
     double? lat = double.tryParse(latController.text);
     double? lng = double.tryParse(lngController.text);
     if (lat == null || lng == null) {
-      try {
-        final pos = await Geolocator.getCurrentPosition(
-          locationSettings: const LocationSettings(accuracy: LocationAccuracy.medium),
-        );
-        lat = pos.latitude;
-        lng = pos.longitude;
-      } catch (_) {
-        if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Could not get location')),
-          );
-        }
-        return;
-      }
+      final pos = await _ensureLocationAndGetCurrent(context);
+      if (pos == null) return;
+      lat = pos.latitude;
+      lng = pos.longitude;
     }
     final radius = double.tryParse(radiusController.text) ?? 200.0;
 

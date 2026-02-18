@@ -18,6 +18,11 @@ class AppEnv {
       dotenv.env['SUPABASE_ANON_KEY']?.trim() ??
       String.fromEnvironment('SUPABASE_ANON_KEY', defaultValue: '');
 
+  /// Google Maps API key (Android/iOS read from .env.local at build time; Dart can use for web).
+  static String get googleMapsApiKey =>
+      dotenv.env['GOOGLE_MAPS_API_KEY']?.trim() ??
+      String.fromEnvironment('GOOGLE_MAPS_API_KEY', defaultValue: '');
+
   static bool get isProd =>
       supabaseUrl.isNotEmpty && !supabaseUrl.contains('localhost');
 }

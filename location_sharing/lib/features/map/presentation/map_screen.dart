@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 
 import '../../../core/auth/auth_providers.dart';
+import '../../../core/config/app_env.dart';
 import '../../../core/widgets/app_bar_with_back.dart';
 import '../providers/map_providers.dart';
 
@@ -44,6 +45,27 @@ class _MapScreenState extends ConsumerState<MapScreen> {
         ),
       );
     }
+    if (AppEnv.googleMapsApiKey.isEmpty) {
+      return Scaffold(
+        appBar: appBarWithBack(context, title: 'Map'),
+        body: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.map_outlined, size: 48, color: theme.colorScheme.outline),
+              const SizedBox(height: 16),
+              Text(
+                'Add GOOGLE_MAPS_API_KEY to .env.local to use the map.',
+                style: theme.textTheme.bodyLarge?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+                textAlign: TextAlign.center,
+              ),
+            ],
+          ),
+        ),
+      );
+    }
     final mapDataAsync = ref.watch(mapDataProvider);
     final safeZonesAsync = ref.watch(userSafeZonesProvider(user.id));
 
@@ -57,7 +79,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
           Marker(
             markerId: MarkerId('always_${loc.userId}'),
             position: LatLng(loc.lat, loc.lng),
-            infoWindow: InfoWindow(title: 'Always share'),
+            infoWindow: const InfoWindow(title: 'Sharing with you'),
           ),
         );
         cameraTarget ??= LatLng(loc.lat, loc.lng);

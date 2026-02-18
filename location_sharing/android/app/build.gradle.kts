@@ -5,6 +5,17 @@ plugins {
     id("dev.flutter.flutter-gradle-plugin")
 }
 
+// Read GOOGLE_MAPS_API_KEY from .env.local (Flutter project root) for Google Maps
+val envFile = rootProject.file("../.env.local")
+val googleMapsApiKey = if (envFile.exists()) {
+    envFile.readLines()
+        .firstOrNull { it.trimStart().startsWith("GOOGLE_MAPS_API_KEY=") }
+        ?.substringAfter("=", "")
+        ?.trim()
+        ?.replace(Regex("^[\"']|[\"']$"), "")
+        ?: ""
+} else ""
+
 android {
     namespace = "com.example.location_sharing"
     compileSdk = flutter.compileSdkVersion
@@ -28,6 +39,7 @@ android {
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+        manifestPlaceholders["GOOGLE_MAPS_API_KEY"] = googleMapsApiKey
     }
 
     buildTypes {
