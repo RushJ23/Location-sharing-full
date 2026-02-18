@@ -24,16 +24,37 @@ class ContactRepository {
     if (_client == null) return [];
     final res = await _client
         .from('contacts')
-        .select('*, profiles(display_name)')
+        .select()
         .eq('user_id', userId)
         .order('layer')
         .order('created_at', ascending: false);
-    return (res as List).map((e) {
+    final list = res as List;
+    if (list.isEmpty) return [];
+    final contactIds = list.map((e) => (e as Map)['contact_user_id'] as String).toSet().toList();
+    final names = await _getDisplayNames(contactIds);
+    return list.map((e) {
       final m = Map<String, dynamic>.from(e as Map);
-      final p = m['profiles'];
-      if (p is List && p.isNotEmpty) m['profiles'] = p.first;
+      final cid = m['contact_user_id'] as String?;
+      if (cid != null && names.containsKey(cid)) {
+        m['profiles'] = <String, dynamic>{'display_name': names[cid]};
+      }
       return Contact.fromJson(m);
     }).toList();
+  }
+
+  Future<Map<String, String>> _getDisplayNames(List<String> userIds) async {
+    if (_client == null || userIds.isEmpty) return {};
+    final res = await _client
+        .from('profiles')
+        .select('id, display_name')
+        .in_('id', userIds);
+    final map = <String, String>{};
+    for (final row in res as List) {
+      final m = row as Map<String, dynamic>;
+      final id = m['id'] as String?;
+      if (id != null) map[id] = m['display_name'] as String? ?? '';
+    }
+    return map;
   }
 
   Future<void> updateContact({
