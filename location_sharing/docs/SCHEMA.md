@@ -155,6 +155,8 @@ Server-side safety check timeout. When `expires_at` passes and `responded_at` is
 ### incident_access
 Which contacts were notified and their response. Drives escalation and RLS.
 
+**Realtime**: This table is in the `supabase_realtime` publication. The app subscribes to INSERT events to show local notifications to emergency contacts when they are added. `REPLICA IDENTITY FULL` is set so Realtime broadcasts full row data.
+
 | Column            | Type      | Notes                          |
 |-------------------|-----------|--------------------------------|
 | id                | uuid PK   | default gen_random_uuid()       |

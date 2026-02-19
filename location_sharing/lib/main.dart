@@ -160,6 +160,7 @@ void main() async {
     if (session != null) {
       curfewScheduler.rescheduleAllForUser(session.user.id);
       incidentNotifier.start(session.user.id);
+      unawaited(incidentNotifier.checkForMissedNotifications());
     }
   }
   runApp(

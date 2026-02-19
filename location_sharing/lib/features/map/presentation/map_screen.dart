@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../core/auth/auth_providers.dart';
 import '../../../core/config/app_env.dart';
@@ -26,6 +27,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
   static const int _maxMarkerSize = 96;
 
   Timer? _refreshTimer;
+  RealtimeChannel? _incidentAccessChannel;
   double? _zoom;
   Set<Marker>? _contactMarkers;
   List<AlwaysShareLocation> _alwaysShareList = [];
@@ -89,6 +91,26 @@ class _MapScreenState extends ConsumerState<MapScreen> {
     );
   }
 
+  void _subscribeIncidentAccess(String userId) {
+    _incidentAccessChannel?.unsubscribe();
+    if (AppEnv.supabaseUrl.isNotEmpty) {
+      _incidentAccessChannel = Supabase.instance.client
+          .channel('incident_access_map_$userId')
+          .onPostgresChanges(
+            event: PostgresChangeEvent.insert,
+            schema: 'public',
+            table: 'incident_access',
+            callback: (_) {
+              if (mounted) {
+                final u = ref.read(currentUserProvider);
+                if (u != null) ref.invalidate(mapDataProvider(u.id));
+              }
+            },
+          )
+          .subscribe();
+    }
+  }
+
   @override
   void initState() {
     super.initState();
@@ -97,6 +119,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
       if (user != null) {
         ref.invalidate(mapDataProvider(user.id));
         ref.invalidate(userSafeZonesProvider(user.id));
+        _subscribeIncidentAccess(user.id);
         _refreshTimer = Timer.periodic(const Duration(seconds: 45), (_) {
           if (mounted) {
             final u = ref.read(currentUserProvider);
@@ -110,6 +133,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
   @override
   void dispose() {
     _refreshTimer?.cancel();
+    _incidentAccessChannel?.unsubscribe();
     super.dispose();
   }
 

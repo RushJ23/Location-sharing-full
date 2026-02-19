@@ -44,9 +44,9 @@ This is implemented in the escalation Edge Function and documented in code comme
    - Get the values from [Supabase Dashboard](https://supabase.com/dashboard) → your project → **Settings** → **API** (Project URL and anon public key).
    - See `.env.local.example` for the exact variable names. You can still use `--dart-define=SUPABASE_URL=...` instead if you prefer.
 
-3. **Supabase tables**: Create tables and RLS once (they are not created automatically).
-   - **Option A** – SQL Editor: In Supabase Dashboard → **SQL Editor**, paste and run the contents of `supabase/migrations/20250217000000_initial_schema.sql`.
-   - **Option B** – CLI: Install [Supabase CLI](https://supabase.com/docs/guides/cli), then from the project root run `supabase link --project-ref <your-project-ref>` and `supabase db push` to apply migrations.
+3. **Supabase tables**: Create tables and RLS once (they are not created automatically). Apply **all** migrations (not just the initial schema). See [docs/SUPABASE_SETUP.md](docs/SUPABASE_SETUP.md) for details.
+   - **Option A** – SQL Editor: In Supabase Dashboard → **SQL Editor**, run each migration file from `supabase/migrations/` in order.
+   - **Option B** – CLI: Install [Supabase CLI](https://supabase.com/docs/guides/cli), then from `location_sharing/` run `supabase link --project-ref <your-project-ref>` and `supabase db push` to apply all migrations.
 
 4. **Google Maps**: Add `GOOGLE_MAPS_API_KEY` to your `.env.local` (see step 2). The Android and iOS builds read it from that file automatically; no need to edit the manifest or AppDelegate by hand.
 

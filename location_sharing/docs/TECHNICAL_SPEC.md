@@ -35,7 +35,7 @@ A consent-first mobile app that tracks location on-device and shares it only dur
   1. Contacts with location available (always-share or opted-in for emergency): sort by distance from subject's last known location (ascending).
   2. Others: use manual_priority within layer; if null, deterministic fallback (e.g. safe zone center or creation order by contact id).
   3. Order: Layer 1 (all contacts sorted as above) → then Layer 2 → then Layer 3.
-- **Edge Function `escalate`**: Accepts `incident_id` and `layer` (1, 2, or 3). Adds Layer N contacts to `incident_access`, fetches FCM tokens from `profiles`, sends push. Requires `FIREBASE_SERVICE_ACCOUNT` and `FIREBASE_PROJECT_ID` secrets.
+- **Edge Function `escalate`**: Accepts `incident_id` and `layer` (1, 2, or 3). Adds Layer N contacts to `incident_access`, fetches FCM tokens from `profiles`, sends FCM push and optionally email (via Resend). Requires `FIREBASE_SERVICE_ACCOUNT` and `FIREBASE_PROJECT_ID` secrets for push; optional `RESEND_API_KEY` for email.
 - **Time-based escalation**: `expire-pending-safety-checks` runs every 1–2 min; for active incidents, at +10 min invokes escalate(layer=2), at +20 min invokes escalate(layer=3).
 - **Incident popup**: If the subject has an active incident, the app shows a blocking "I am safe" dialog on open/resume until they resolve it.
 
@@ -60,9 +60,9 @@ All defaults are documented in README and this spec and kept extensible.
 
 ## 9. Setup (Post-Migration)
 
-### Supabase MCP applied
-- Migrations: `user_location_samples`, `pending_safety_checks`, `incidents` subject location columns, RPCs `register_pending_safety_check`, `respond_to_safety_check`.
-- Edge Functions: `escalate`, `expire-pending-safety-checks` (both deployed via MCP).
+### Migrations (apply all)
+- Initial schema plus: `curfew_start_end_time`, `accept_contact_request_function`, `always_share_rpc_and_accept_trigger`, `get_locations_by_user_ids`, `fix_incidents_rls_recursion`, `fix_always_share_direction`, `user_location_samples_and_pending_safety_checks`, `incidents_subject_location`, `pending_safety_check_rpc`, `enable_realtime_incident_access`, `incident_access_replica_identity_full`.
+- **Realtime for `incident_access`**: The `enable_realtime_incident_access` migration adds `incident_access` to `supabase_realtime` publication. The `incident_access_replica_identity_full` migration sets `REPLICA IDENTITY FULL` on `incident_access`. Both are required for emergency contacts to receive Realtime-based local notifications when incidents are created.
 
 ### You still need to do
 1. **Schedule `expire-pending-safety-checks`**  

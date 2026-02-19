@@ -1,16 +1,16 @@
 # Supabase setup
 
-## 1. Run the database migration
+## 1. Run the database migrations
 
-Apply the schema and RLS so the app can use Supabase.
+Apply all migrations so the app can use Supabase. The app requires **all** migrations, including Realtime for `incident_access` (used for emergency contact notifications).
 
 - **Option A – Supabase Dashboard**  
-  In [Supabase Dashboard](https://supabase.com/dashboard) → your project → **SQL Editor**, paste and run the contents of:
-
-  `supabase/migrations/20250217000000_initial_schema.sql`
+  In [Supabase Dashboard](https://supabase.com/dashboard) → your project → **SQL Editor**, run each migration file in order from `supabase/migrations/` (alphabetically by timestamp). In particular:
+  - `20250219030000_enable_realtime_incident_access.sql` — adds `incident_access` to `supabase_realtime` publication (required for contact notifications).
+  - `20250219040000_incident_access_replica_identity.sql` — sets `REPLICA IDENTITY FULL` on `incident_access`.
 
 - **Option B – Supabase CLI**  
-  From the project root:
+  From the project root (`location_sharing/`):
 
   ```bash
   supabase link --project-ref <your-project-ref>
@@ -18,9 +18,9 @@ Apply the schema and RLS so the app can use Supabase.
   ```
 
 - **Option C – Supabase MCP**  
-  If you use Supabase MCP, execute the SQL from  
-  `supabase/migrations/20250217000000_initial_schema.sql`  
-  in your connected project.
+  If you use Supabase MCP, apply all migrations from `supabase/migrations/` in order.
+
+The `incident_access` table must be in the `supabase_realtime` publication for emergency contacts to receive local notifications when incidents are created.
 
 ## 2. Fix verification email redirect (no localhost)
 
