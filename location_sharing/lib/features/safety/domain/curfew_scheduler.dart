@@ -1,6 +1,7 @@
 import 'package:timezone/timezone.dart' as tz;
 
 import '../../../data/repositories/curfew_repository.dart';
+import '../../../data/repositories/pending_safety_check_repository.dart';
 import 'curfew_schedule.dart';
 import 'safety_notification_service.dart';
 
@@ -15,16 +16,19 @@ class CurfewScheduler {
   CurfewScheduler({
     required SafetyNotificationService notificationService,
     required CurfewRepository curfewRepository,
+    PendingSafetyCheckRepository? pendingCheckRepository,
   })  : _notificationService = notificationService,
-        _curfewRepository = curfewRepository;
+        _curfewRepository = curfewRepository,
+        _pendingCheckRepository = pendingCheckRepository;
 
   final SafetyNotificationService _notificationService;
   final CurfewRepository _curfewRepository;
+  final PendingSafetyCheckRepository? _pendingCheckRepository;
 
   static const int recheckMinutes = 10;
 
   /// Schedules the next start-time notification for each enabled curfew of [userId].
-  /// Call on app start and when schedules are updated.
+  /// Also registers pending safety check with server for background timeout.
   Future<void> rescheduleAllForUser(String userId) async {
     final schedules = await _curfewRepository.getCurfewSchedules(userId);
     for (final schedule in schedules) {
@@ -36,6 +40,12 @@ class CurfewScheduler {
         id: notificationIdForSchedule(schedule.id),
         scheduledDate: scheduledDate,
         payload: schedule.id,
+      );
+      final timeoutMin = schedule.responseTimeoutMinutes;
+      final expiresAt = scheduledDate.add(Duration(minutes: timeoutMin));
+      await _pendingCheckRepository?.register(
+        scheduleId: schedule.id,
+        expiresAt: DateTime.fromMillisecondsSinceEpoch(expiresAt.millisecondsSinceEpoch),
       );
     }
   }
@@ -49,7 +59,7 @@ class CurfewScheduler {
 
   /// When user taps "I'm safe" from a curfew notification, schedule the next
   /// check in 10 minutes unless we're past end time.
-  /// [userId] is the owner of the curfew (current user when in app).
+  /// Also registers pending safety check for background timeout.
   Future<void> scheduleRecheckIn10Min(String userId, String scheduleId) async {
     final schedules = await _curfewRepository.getCurfewSchedules(userId);
     CurfewSchedule? schedule;
@@ -69,6 +79,12 @@ class CurfewScheduler {
       id: notificationIdForSchedule(schedule.id),
       scheduledDate: in10,
       payload: schedule.id,
+    );
+    final timeoutMin = schedule.responseTimeoutMinutes;
+    final expiresAt = in10.add(Duration(minutes: timeoutMin));
+    await _pendingCheckRepository?.register(
+      scheduleId: schedule.id,
+      expiresAt: DateTime.fromMillisecondsSinceEpoch(expiresAt.millisecondsSinceEpoch),
     );
   }
 

@@ -23,28 +23,13 @@ class AlwaysShareRepository {
 
   final SupabaseClient? _client;
 
-  /// Returns locations of users that the current user has as always-share contacts.
-  /// Fetches our always-share contact IDs first, then gets their locations via RPC.
+  /// Returns locations of users who have the current user as always-share contact (they share with me).
+  /// Uses get_my_always_share_locations RPC (SECURITY DEFINER) to bypass contacts RLS; client cannot
+  /// read other users' contact rows (contact_user_id=me has user_id=sharer, not me).
   Future<List<AlwaysShareLocation>> getAlwaysShareLocations(String userId) async {
     if (_client == null) return [];
 
-    final contactRes = await _client!
-        .from('contacts')
-        .select('contact_user_id')
-        .eq('user_id', userId)
-        .eq('is_always_share', true);
-    final contactList = contactRes as List? ?? [];
-    if (contactList.isEmpty) return [];
-
-    final userIds = contactList
-        .map((e) => (e as Map<String, dynamic>)['contact_user_id'] as String)
-        .toSet()
-        .toList();
-
-    final res = await _client!.rpc(
-      'get_always_share_locations_for_users',
-      params: {'p_user_ids': userIds},
-    );
+    final res = await _client!.rpc('get_my_always_share_locations');
     final rawList = res is List ? res : (res != null ? [res] : <dynamic>[]);
     if (rawList.isEmpty) return [];
     final list = rawList.map((e) {

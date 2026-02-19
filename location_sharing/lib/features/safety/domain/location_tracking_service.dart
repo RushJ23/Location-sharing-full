@@ -4,17 +4,20 @@ import 'package:geolocator/geolocator.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 import '../../../data/repositories/location_history_repository.dart';
+import '../../../data/repositories/user_location_upload_repository.dart';
 
 /// Configurable sampling interval (battery-conscious). Default 5 minutes.
 const Duration defaultSamplingInterval = Duration(minutes: 5);
 
 /// Requests location permissions (foreground then background), then samples
 /// periodically and persists to local DB. Prunes data older than 12h.
+/// Uploads last 12h to Supabase when userId is provided.
 /// On Android, when app is in background, use a foreground service for reliable sampling.
 class LocationTrackingService {
-  LocationTrackingService(this._repository);
+  LocationTrackingService(this._repository, [this._uploadRepository]);
 
   final LocationHistoryRepository _repository;
+  final UserLocationUploadRepository? _uploadRepository;
   Timer? _timer;
 
   bool get isTracking => _timer != null;
@@ -34,7 +37,11 @@ class LocationTrackingService {
   }
 
   /// Start periodic sampling and persist to DB. Prunes after each insert.
-  void startTracking({Duration interval = defaultSamplingInterval}) {
+  /// If [userId] is provided and upload repository is set, uploads last 12h to Supabase after each sample.
+  void startTracking({
+    Duration interval = defaultSamplingInterval,
+    String? userId,
+  }) {
     stopTracking();
     void sample() async {
       try {
@@ -45,6 +52,17 @@ class LocationTrackingService {
         );
         await _repository.addSample(pos.latitude, pos.longitude, pos.timestamp);
         await _repository.pruneOlderThan12Hours();
+        if (userId != null && _uploadRepository != null) {
+          try {
+            final samples = await _repository.getLast12Hours();
+            await _uploadRepository!.uploadLast12Hours(
+              userId: userId,
+              samples: samples,
+            );
+          } catch (_) {
+            // Ignore upload failure; next sample will retry
+          }
+        }
       } catch (_) {
         // Ignore single failure; next interval will retry
       }

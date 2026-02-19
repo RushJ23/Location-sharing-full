@@ -68,3 +68,25 @@ VALUES
   ('a0000005-0000-4000-8000-000000000005'::uuid, 40.4415, -79.9490, now()),
   ('f56633bb-64ff-4ea3-95f3-00a128e25599'::uuid, 40.4442, -79.9415, now())
 ON CONFLICT (user_id) DO UPDATE SET lat = EXCLUDED.lat, lng = EXCLUDED.lng, updated_at = EXCLUDED.updated_at;
+
+-- 7. User location samples (past 12 hours) for dummy accounts and your account
+-- Used when creating incidents: last 12h path and current location.
+-- Run as project owner (postgres) to bypass RLS. Pittsburgh-area coordinates.
+-- Points every 10 minutes for last 12 hours. Per-user offsets: Alex 40.443,-79.942;
+-- Sam 40.441,-79.945; Jordan 40.445,-79.940; Casey 40.446,-79.938; Morgan 40.440,-79.950.
+INSERT INTO public.user_location_samples (user_id, lat, lng, timestamp)
+SELECT u, lat, lng, ts
+FROM (VALUES
+  ('a0000001-0000-4000-8000-000000000001'::uuid, 40.443, -79.942),
+  ('a0000002-0000-4000-8000-000000000002'::uuid, 40.441, -79.945),
+  ('a0000003-0000-4000-8000-000000000003'::uuid, 40.445, -79.940),
+  ('a0000004-0000-4000-8000-000000000004'::uuid, 40.446, -79.938),
+  ('a0000005-0000-4000-8000-000000000005'::uuid, 40.440, -79.950),
+  ('f56633bb-64ff-4ea3-95f3-00a128e25599'::uuid, 40.444, -79.941)
+) AS users(u, lat, lng)
+CROSS JOIN generate_series(
+  now() - interval '12 hours',
+  now(),
+  interval '10 minutes'
+) AS ts
+ON CONFLICT (user_id, timestamp) DO NOTHING;

@@ -5,6 +5,7 @@ import '../../../data/local/database_provider.dart';
 import '../../../data/repositories/curfew_repository.dart';
 import '../../../data/repositories/location_history_repository.dart';
 import '../../../data/repositories/safe_zone_repository.dart';
+import '../../../data/repositories/user_location_upload_repository.dart';
 import '../domain/curfew_scheduler.dart';
 import '../domain/location_tracking_service.dart';
 import '../domain/safety_notification_service.dart';
@@ -13,9 +14,14 @@ final locationHistoryRepositoryProvider = Provider<LocationHistoryRepository>((r
   return LocationHistoryRepository(ref.watch(appDatabaseProvider));
 });
 
+final userLocationUploadRepositoryProvider = Provider<UserLocationUploadRepository>((ref) {
+  return UserLocationUploadRepository();
+});
+
 final locationTrackingServiceProvider = Provider<LocationTrackingService>((ref) {
   final repo = ref.watch(locationHistoryRepositoryProvider);
-  return LocationTrackingService(repo);
+  final uploadRepo = ref.watch(userLocationUploadRepositoryProvider);
+  return LocationTrackingService(repo, uploadRepo);
 });
 
 /// Last 12 hours of location samples (e.g. for incident upload or map).

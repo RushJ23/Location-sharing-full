@@ -58,6 +58,14 @@ class IncidentRepository {
         'notified_at': DateTime.now().toIso8601String(),
       });
     }
+    try {
+      await _client.functions.invoke('escalate', body: {
+        'incident_id': incident.id,
+        'layer': 1,
+      });
+    } catch (_) {
+      // Escalate push may fail if FCM not configured
+    }
     return incident;
   }
 
@@ -95,6 +103,28 @@ class IncidentRepository {
     return List<Map<String, dynamic>>.from(
       (res as List).map((e) => Map<String, dynamic>.from(e as Map)),
     );
+  }
+
+  /// Updates subject's current location for an active incident (live tracking during incident).
+  Future<void> updateSubjectLocation(String incidentId, double lat, double lng) async {
+    if (_client == null) return;
+    await _client!.from('incidents').update({
+      'subject_current_lat': lat,
+      'subject_current_lng': lng,
+      'subject_location_updated_at': DateTime.now().toIso8601String(),
+    }).eq('id', incidentId);
+  }
+
+  /// Returns active incidents where the current user is the subject.
+  Future<List<Incident>> getActiveIncidentsWhereSubject(String userId) async {
+    if (_client == null) return [];
+    final res = await _client!
+        .from('incidents')
+        .select()
+        .eq('user_id', userId)
+        .eq('status', 'active')
+        .order('created_at', ascending: false);
+    return (res as List).map((e) => Incident.fromJson(Map<String, dynamic>.from(e as Map))).toList();
   }
 
   Future<void> resolveIncident(String incidentId, String resolvedByUserId) async {

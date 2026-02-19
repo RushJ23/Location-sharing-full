@@ -1,7 +1,6 @@
-// Escalation Edge Function: notify contacts by layer (closest → furthest within layer).
-// "Closest → furthest": contacts with location (always-share or opted-in) are ordered by
-// distance from subject's last_known; others use manual_priority or deterministic fallback.
-import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
+// Escalation Edge Function: add Layer N contacts to incident_access and send email.
+// Accepts incident_id and layer (1, 2, or 3).
+// Sends email to contact's Supabase signup email via Resend (optional: set RESEND_API_KEY).
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
 const corsHeaders = {
@@ -9,7 +8,27 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-serve(async (req) => {
+async function sendEmail(to: string, incidentId: string, supabaseUrl: string): Promise<boolean> {
+  const apiKey = Deno.env.get('RESEND_API_KEY');
+  if (!apiKey) return false;
+  const incidentUrl = `${supabaseUrl.replace('.supabase.co', '')}/project/_/auth/redirect?redirect_to=location-sharing://incidents/${incidentId}`;
+  const res = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      from: Deno.env.get('RESEND_FROM') ?? 'Location Sharing <onboarding@resend.dev>',
+      to: [to],
+      subject: 'Emergency: Someone needs help',
+      html: `<p>Someone you know has triggered an emergency alert. Open the Location Sharing app to view their location and last 12h history.</p><p>Incident ID: ${incidentId}</p>`,
+    }),
+  });
+  return res.ok;
+}
+
+Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
   }
@@ -18,7 +37,10 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
-    const { incident_id } = await req.json();
+    const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
+    const body = await req.json().catch(() => ({}));
+    const incident_id = body.incident_id;
+    const layer = body.layer ?? 1;
     if (!incident_id) {
       return new Response(JSON.stringify({ error: 'incident_id required' }), {
         status: 400,
@@ -27,7 +49,7 @@ serve(async (req) => {
     }
     const { data: incident } = await supabase
       .from('incidents')
-      .select('id, user_id, last_known_lat, last_known_lng')
+      .select('id, user_id')
       .eq('id', incident_id)
       .single();
     if (!incident) {
@@ -37,31 +59,51 @@ serve(async (req) => {
       });
     }
     const subjectId = incident.user_id;
-    const lat = incident.last_known_lat;
-    const lng = incident.last_known_lng;
     const { data: contacts } = await supabase
       .from('contacts')
-      .select('id, contact_user_id, layer, is_always_share, manual_priority')
+      .select('contact_user_id')
       .eq('user_id', subjectId)
-      .order('layer')
-      .order('manual_priority', { ascending: true, nullsFirst: false });
+      .eq('layer', layer);
     if (!contacts || contacts.length === 0) {
-      return new Response(JSON.stringify({ ok: true, message: 'No contacts' }), {
+      return new Response(JSON.stringify({ ok: true, notified: 0, emailsSent: 0 }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
-    const layer1 = contacts.filter((c) => c.layer === 1);
-    for (const c of layer1) {
+    const contactIds = contacts.map((c) => c.contact_user_id);
+    const { data: existing } = await supabase
+      .from('incident_access')
+      .select('contact_user_id')
+      .eq('incident_id', incident_id)
+      .in('contact_user_id', contactIds);
+    const existingIds = new Set((existing ?? []).map((r) => r.contact_user_id));
+    const toNotify = contactIds.filter((id) => !existingIds.has(id));
+
+    for (const contactUserId of toNotify) {
       await supabase.from('incident_access').upsert({
         incident_id,
-        contact_user_id: c.contact_user_id,
-        layer: 1,
+        contact_user_id: contactUserId,
+        layer,
         notified_at: new Date().toISOString(),
       }, { onConflict: 'incident_id,contact_user_id' });
     }
-    return new Response(JSON.stringify({ ok: true, notified: layer1.length }), {
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    });
+
+    let emailsSent = 0;
+    for (const contactUserId of toNotify) {
+      try {
+        const { data } = await supabase.auth.admin.getUserById(contactUserId);
+        const email = data?.user?.email;
+        if (email && await sendEmail(email, incident_id, supabaseUrl)) {
+          emailsSent++;
+        }
+      } catch (_) {
+        // Skip failed email
+      }
+    }
+
+    return new Response(
+      JSON.stringify({ ok: true, notified: toNotify.length, emailsSent }),
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
   } catch (e) {
     return new Response(JSON.stringify({ error: String(e) }), {
       status: 500,

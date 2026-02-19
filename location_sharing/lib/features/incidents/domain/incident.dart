@@ -6,6 +6,9 @@ class Incident {
     required this.trigger,
     this.lastKnownLat,
     this.lastKnownLng,
+    this.subjectCurrentLat,
+    this.subjectCurrentLng,
+    this.subjectLocationUpdatedAt,
     required this.createdAt,
     this.resolvedAt,
     this.resolvedBy,
@@ -17,6 +20,9 @@ class Incident {
   final String trigger; // 'curfew_timeout' | 'need_help' | 'manual'
   final double? lastKnownLat;
   final double? lastKnownLng;
+  final double? subjectCurrentLat;
+  final double? subjectCurrentLng;
+  final DateTime? subjectLocationUpdatedAt;
   final DateTime createdAt;
   final DateTime? resolvedAt;
   final String? resolvedBy;
@@ -29,6 +35,11 @@ class Incident {
       trigger: json['trigger'] as String,
       lastKnownLat: (json['last_known_lat'] as num?)?.toDouble(),
       lastKnownLng: (json['last_known_lng'] as num?)?.toDouble(),
+      subjectCurrentLat: (json['subject_current_lat'] as num?)?.toDouble(),
+      subjectCurrentLng: (json['subject_current_lng'] as num?)?.toDouble(),
+      subjectLocationUpdatedAt: json['subject_location_updated_at'] != null
+          ? DateTime.parse(json['subject_location_updated_at'] as String)
+          : null,
       createdAt: DateTime.parse(json['created_at'] as String),
       resolvedAt: json['resolved_at'] != null
           ? DateTime.parse(json['resolved_at'] as String)

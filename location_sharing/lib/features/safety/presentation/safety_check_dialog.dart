@@ -5,13 +5,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/auth/auth_providers.dart';
+import '../../../data/repositories/pending_safety_check_repository.dart';
 import '../../incidents/providers/incident_providers.dart';
 import '../providers/location_providers.dart';
 
 /// Shows an in-app "Are you safe?" dialog with I'm safe / I need help and optional timeout.
 /// Call from Safety screen (bell) or when app opens from notification tap.
 /// [payload] Optional schedule id for scheduling 10-min recheck on "I'm safe".
-/// [timeoutMinutes] If > 0, creates incident (curfew_timeout) and notifies contacts when time runs out.
+/// [timeoutMinutes] If > 0, registers pending safety check and creates incident on timeout.
 Future<void> showSafetyCheckDialog(
   BuildContext context, {
   String? payload,
@@ -19,6 +20,13 @@ Future<void> showSafetyCheckDialog(
 }) async {
   if (!context.mounted) return;
   final ref = ProviderScope.containerOf(context);
+  if (timeoutMinutes > 0 && payload == null) {
+    final expiresAt = DateTime.now().add(Duration(minutes: timeoutMinutes));
+    await PendingSafetyCheckRepository().register(
+      scheduleId: null,
+      expiresAt: expiresAt,
+    );
+  }
   final result = await showDialog<bool?>(
     context: context,
     barrierDismissible: false,
@@ -29,6 +37,7 @@ Future<void> showSafetyCheckDialog(
   );
   if (!context.mounted) return;
   if (result == true) {
+    await PendingSafetyCheckRepository().respond(scheduleId: payload ?? null);
     ref.read(safetyNotificationServiceProvider).cancelSafetyCheck();
     if (payload != null && payload.isNotEmpty) {
       final userId = ref.read(currentUserProvider)?.id;
@@ -39,6 +48,7 @@ Future<void> showSafetyCheckDialog(
     return;
   }
   if (result == false) {
+    await PendingSafetyCheckRepository().respond(scheduleId: payload ?? null);
     context.go('/incidents/create?trigger=need_help');
     return;
   }
@@ -84,6 +94,7 @@ class _SafetyCheckDialogContentState extends ConsumerState<_SafetyCheckDialogCon
     _timer?.cancel();
     final user = ref.read(currentUserProvider);
     if (user == null || !mounted) return;
+    await PendingSafetyCheckRepository().respond(scheduleId: widget.payload ?? null);
     final incidentRepo = ref.read(incidentRepositoryProvider);
     final locationRepo = ref.read(locationHistoryRepositoryProvider);
     final samples = await locationRepo.getLast12Hours();

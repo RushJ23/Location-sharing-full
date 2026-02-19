@@ -37,6 +37,8 @@ class SafetyNotificationService {
 
   late final FlutterLocalNotificationsPlugin _plugin;
 
+  FlutterLocalNotificationsPlugin get plugin => _plugin;
+
   /// Callback when user taps "I'm safe". Arguments: notification id, optional payload (e.g. schedule id).
   void Function(int, String?)? onSafePressed;
 
@@ -46,6 +48,10 @@ class SafetyNotificationService {
   /// Callback when user taps the notification body (opens app without choosing an action).
   /// Use this to show the in-app safety dialog. Arguments: notification id, optional payload.
   void Function(int, String?)? onNotificationOpened;
+
+  /// Callback when user taps an incident emergency notification (id 100).
+  /// Payload is the incident ID for navigation.
+  void Function(String incidentId)? onIncidentNotificationOpened;
 
   Future<void> initialize() async {
     const android = AndroidInitializationSettings('@mipmap/ic_launcher');
@@ -78,6 +84,13 @@ class SafetyNotificationService {
     final id = response.id;
     if (id == null) return;
     final payload = response.payload;
+    // Incident emergency notifications use id 100 (see incident_notification_service.dart)
+    if (id == 100) {
+      if (payload != null && payload.isNotEmpty) {
+        onIncidentNotificationOpened?.call(payload);
+      }
+      return;
+    }
     if (action == actionSafe) {
       onSafePressed?.call(id, payload);
     } else if (action == actionNeedHelp) {

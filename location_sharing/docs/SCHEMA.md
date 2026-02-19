@@ -105,11 +105,50 @@ One row per emergency incident (subject = user whose safety is in question).
 | trigger         | text      | 'curfew_timeout' \| 'need_help' \| 'manual' |
 | last_known_lat  | double precision |                    |
 | last_known_lng  | double precision |                    |
+| subject_current_lat | double precision | live tracking during incident |
+| subject_current_lng | double precision | live tracking during incident |
+| subject_location_updated_at | timestamptz | nullable |
 | created_at      | timestamptz | default now()                |
 | resolved_at     | timestamptz | nullable                     |
 | resolved_by     | uuid FK   | nullable; user who resolved    |
 
 **RLS**: User can read/update if they are the subject (user_id = auth.uid()) or if they appear in incident_access for this incident. No direct INSERT from client for status/trigger—use Edge Function or service role for creation and access grants.
+
+---
+
+### user_location_samples
+Rolling 12h location history per user, uploaded continuously by the app.
+
+| Column     | Type      | Notes                          |
+|------------|-----------|--------------------------------|
+| id         | uuid PK   | default gen_random_uuid()       |
+| user_id    | uuid FK   | owner                          |
+| lat        | double precision |                    |
+| lng        | double precision |                    |
+| timestamp  | timestamptz | when point was recorded      |
+
+Unique (user_id, timestamp). Index on (user_id, timestamp).
+
+**RLS**: Users can INSERT/UPDATE/DELETE/SELECT only their own rows.
+
+---
+
+### pending_safety_checks
+Server-side safety check timeout. When `expires_at` passes and `responded_at` is NULL, the `expire-pending-safety-checks` Edge Function creates an incident.
+
+| Column       | Type      | Notes                          |
+|--------------|-----------|--------------------------------|
+| id           | uuid PK   | default gen_random_uuid()       |
+| user_id      | uuid FK   | subject                        |
+| schedule_id  | uuid FK   | nullable; curfew_schedules     |
+| expires_at   | timestamptz | when check expires           |
+| responded_at | timestamptz | nullable; set when user responds |
+
+**RLS**: Users can INSERT/UPDATE/SELECT only their own rows.
+
+**RPCs**:
+- `register_pending_safety_check(p_schedule_id, p_expires_at)` — registers a pending check; called when curfew notification is scheduled or manual check is shown.
+- `respond_to_safety_check(p_schedule_id)` — marks pending check(s) as responded; called when user taps "I'm safe" or "I need help".
 
 ---
 
@@ -157,7 +196,7 @@ Live-ish position for users who have "always share" on. Updated by app periodica
 | lng        | double precision |                    |
 | updated_at | timestamptz | default now()                |
 
-**RLS**: User can UPDATE their own row (when they share). User can SELECT only rows where they have this user in their contacts with is_always_share = true. So: "I can see B's location only if I have B as an always-share contact."
+**RLS**: User can UPDATE their own row (when they share). User can SELECT only rows where the location owner (user_id) has the current user in their contacts with is_always_share = true. So: "I can see B's location only if B has me as an always-share contact (B shares with me)."
 
 ---
 
@@ -184,6 +223,6 @@ Per-layer visibility: precise vs coarse, history length. Can be user-scoped late
 4. **safe_zones**, **curfew_schedules**, **layer_policies**: Own rows only (user_id = auth.uid()).
 5. **incidents**: Read/update if subject or in incident_access; create via function or with policy that allows insert when user_id = auth.uid() and status = 'active'.
 6. **incident_access**, **incident_location_history**: Read if subject or contact for that incident; write via Edge Function or constrained policy.
-7. **always_share_locations**: Update own row; read only rows for users who are in my contacts with is_always_share = true.
+7. **always_share_locations**: Update own row; read only rows where the sharer (user_id) has me in their contacts with is_always_share = true.
 
 Implement these as named policies in Supabase (e.g. `CREATE POLICY ... ON table_name FOR SELECT USING (...)`). Use service role in Edge Functions for escalation and incident creation.
