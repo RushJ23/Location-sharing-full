@@ -1,6 +1,8 @@
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:timezone/timezone.dart' as tz;
 
+import '../../incidents/domain/incident_notification_service.dart';
+
 /// Ids for "Are you safe?" notification and actions.
 const int safetyCheckNotificationId = 1;
 const String safetyCheckChannelId = 'safety_check';
@@ -84,8 +86,8 @@ class SafetyNotificationService {
     final id = response.id;
     if (id == null) return;
     final payload = response.payload;
-    // Incident emergency notifications use id 100 (see incident_notification_service.dart)
-    if (id == 100) {
+    // Incident emergency notifications use id 100–32867 (incidentEmergencyNotificationId + hash)
+    if (id >= incidentEmergencyNotificationId && id < incidentEmergencyNotificationId + 32768) {
       if (payload != null && payload.isNotEmpty) {
         onIncidentNotificationOpened?.call(payload);
       }

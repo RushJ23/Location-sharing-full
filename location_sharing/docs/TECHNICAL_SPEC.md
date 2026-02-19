@@ -37,11 +37,16 @@ A consent-first mobile app that tracks location on-device and shares it only dur
   3. Order: Layer 1 (all contacts sorted as above) → then Layer 2 → then Layer 3.
 - **Edge Function `escalate`**: Accepts `incident_id` and `layer` (1, 2, or 3). Adds Layer N contacts to `incident_access`, fetches FCM tokens from `profiles`, sends FCM push and optionally email (via Resend). Requires `FIREBASE_SERVICE_ACCOUNT` and `FIREBASE_PROJECT_ID` secrets for push; optional `RESEND_API_KEY` for email.
 - **Time-based escalation**: `expire-pending-safety-checks` runs every 1–2 min; for active incidents, at +10 min invokes escalate(layer=2), at +20 min invokes escalate(layer=3).
+- **Contact "I couldn't reach them"**: When a contact taps "I couldn't reach them", the app updates `incident_access.could_not_reach_at` and immediately invokes `escalate(incident_id, layer: myLayer + 1)` so the next layer (2 or 3) is notified. No further escalation if the contact is already layer 3.
+- **Contact "I confirm they're safe"**: Resolves the incident and navigates to Home; Home and Map providers are invalidated so the active incident card and map update immediately.
 - **Incident popup**: If the subject has an active incident, the app shows a blocking "I am safe" dialog on open/resume until they resolve it.
+- **Incident detail**: App bar shows subject display name ("Incident — {name}"). The 12h location path is shown as a polyline plus one marker per path point; "Current location" marker when live tracking is active.
 
 ## 6. Maps and Visibility
 
-- **Map screen**: (1) Always-share connections (live-ish markers), (2) Active incidents and subject marker, (3) For authorized viewers, polyline of last 12h. Do not show emergency contacts by default unless there is an active incident or mutual always-share.
+- **Home screen**: When the user has active incidents (as subject or contact), an "Active incidents" card is shown; tapping it navigates to the Map. The card and map data refresh on app resume and when an incident is resolved.
+- **Map screen**: (1) Always-share connections (live-ish markers), (2) Active incidents and subject marker, (3) For authorized viewers, polyline of last 12h. Map subscribes to Realtime on `incident_access` so new incidents appear without leaving the screen. Do not show emergency contacts by default unless there is an active incident or mutual always-share.
+- **Incident detail map**: Polyline for the 12h path plus one marker per path point (with timestamp in info window); optional "Current location" marker when the subject's live position is being updated.
 - **Provider**: Google Maps (`google_maps_flutter`). Polylines and markers for incidents; safe zones drawn as circles in app.
 
 ## 7. Backend and Security

@@ -7,6 +7,7 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 
 import '../../../core/auth/auth_providers.dart';
 import '../../../core/widgets/app_bar_with_back.dart';
+import '../../map/providers/map_providers.dart';
 import '../domain/incident.dart';
 import '../providers/incident_providers.dart';
 
@@ -20,17 +21,19 @@ class IncidentDetailScreen extends ConsumerWidget {
     final theme = Theme.of(context);
     final incidentAsync = ref.watch(_incidentProvider(incidentId));
     final incident = incidentAsync.valueOrNull;
+    final subjectName = ref.watch(incidentSubjectDisplayNameProvider(incidentId)).valueOrNull;
     final user = ref.watch(currentUserProvider);
     final isSubject = user?.id == incident?.userId;
     final shouldBlockPop =
         incident != null && incident.isActive && isSubject == true;
+    final appBarTitle = subjectName != null ? 'Incident — $subjectName' : 'Incident';
 
     return PopScope(
       canPop: !shouldBlockPop,
       child: Scaffold(
         appBar: appBarWithBack(
           context,
-          title: 'Incident',
+          title: appBarTitle,
           showBackButton: !shouldBlockPop,
         ),
         body: incidentAsync.when(
@@ -147,7 +150,7 @@ class IncidentDetailScreen extends ConsumerWidget {
                 ),
                 const SizedBox(height: 12),
                 FilledButton.icon(
-                  onPressed: () => _confirmSafe(ref),
+                  onPressed: () => _confirmSafe(context, ref),
                   icon: const Icon(Icons.check_circle_rounded, size: 20),
                   label: const Text('I confirm they\'re safe'),
                   style: FilledButton.styleFrom(
@@ -205,22 +208,33 @@ class IncidentDetailScreen extends ConsumerWidget {
     await ref.read(incidentRepositoryProvider).resolveIncident(incidentId, user.id);
     ref.invalidate(_incidentProvider(incidentId));
     ref.invalidate(incidentRepositoryProvider);
+    ref.invalidate(activeIncidentsProvider);
+    ref.invalidate(mapDataProvider(user.id));
     if (!context.mounted) return;
     context.go('/');
   }
 
-  Future<void> _confirmSafe(WidgetRef ref) async {
+  Future<void> _confirmSafe(BuildContext context, WidgetRef ref) async {
     final user = ref.read(currentUserProvider);
     if (user == null) return;
     await ref.read(incidentRepositoryProvider).confirmSafe(incidentId, user.id);
     await ref.read(incidentRepositoryProvider).resolveIncident(incidentId, user.id);
     ref.invalidate(_incidentProvider(incidentId));
+    ref.invalidate(activeIncidentsProvider);
+    ref.invalidate(mapDataProvider(user.id));
+    if (!context.mounted) return;
+    context.go('/');
   }
 
   Future<void> _couldNotReach(WidgetRef ref) async {
     final user = ref.read(currentUserProvider);
     if (user == null) return;
-    await ref.read(incidentRepositoryProvider).couldNotReach(incidentId, user.id);
+    final repo = ref.read(incidentRepositoryProvider);
+    await repo.couldNotReach(incidentId, user.id);
+    final myLayer = await repo.getContactLayerForIncident(incidentId, user.id);
+    if (myLayer != null && myLayer < 3) {
+      await repo.invokeEscalation(incidentId, myLayer + 1);
+    }
     ref.invalidate(_incidentProvider(incidentId));
   }
 }
@@ -333,6 +347,17 @@ class _IncidentMapState extends ConsumerState<_IncidentMap> {
               markerId: const MarkerId('current'),
               position: LatLng(widget.incident.subjectCurrentLat!, widget.incident.subjectCurrentLng!),
               infoWindow: const InfoWindow(title: 'Current location', snippet: 'Live position'),
+            ),
+          );
+        }
+        for (int i = 0; i < points.length; i++) {
+          final ts = path[i]['timestamp'];
+          final snippet = ts != null && ts is String ? ts : '';
+          markers.add(
+            Marker(
+              markerId: MarkerId('path_$i'),
+              position: points[i],
+              infoWindow: InfoWindow(title: 'Path point', snippet: snippet),
             ),
           );
         }

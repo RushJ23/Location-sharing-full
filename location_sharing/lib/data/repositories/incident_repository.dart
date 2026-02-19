@@ -149,4 +149,32 @@ class IncidentRepository {
       'could_not_reach_at': DateTime.now().toIso8601String(),
     }).eq('incident_id', incidentId).eq('contact_user_id', contactUserId);
   }
+
+  /// Returns the current user's layer for this incident (1, 2, or 3), or null if not in incident_access.
+  Future<int?> getContactLayerForIncident(String incidentId, String contactUserId) async {
+    if (_client == null) return null;
+    final res = await _client
+        .from('incident_access')
+        .select('layer')
+        .eq('incident_id', incidentId)
+        .eq('contact_user_id', contactUserId)
+        .maybeSingle();
+    if (res == null) return null;
+    final layer = res['layer'];
+    if (layer is int && layer >= 1 && layer <= 3) return layer;
+    return null;
+  }
+
+  /// Invokes the escalate Edge Function for the given layer (2 or 3). Used when a contact taps "I couldn't reach them".
+  Future<void> invokeEscalation(String incidentId, int layer) async {
+    if (_client == null) return;
+    try {
+      await _client.functions.invoke('escalate', body: {
+        'incident_id': incidentId,
+        'layer': layer,
+      });
+    } catch (_) {
+      // Escalate may fail if FCM not configured
+    }
+  }
 }

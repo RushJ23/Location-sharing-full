@@ -205,6 +205,13 @@ class _LocationSharingAppState extends ConsumerState<LocationSharingApp>
     if (AppEnv.supabaseUrl.isNotEmpty) {
       Supabase.instance.client.auth.onAuthStateChange.listen(_onAuthChange);
       WidgetsBinding.instance.addObserver(this);
+      widget.incidentNotifier.onIncidentShown = () {
+        final user = ref.read(currentUserProvider);
+        if (user != null) {
+          ref.invalidate(mapDataProvider(user.id));
+          ref.invalidate(activeIncidentsProvider);
+        }
+      };
     }
   }
 
@@ -218,6 +225,12 @@ class _LocationSharingAppState extends ConsumerState<LocationSharingApp>
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       widget.incidentNotifier.checkForMissedNotifications();
+      // Refresh incidents and map data so user sees new incidents when navigating
+      final user = ref.read(currentUserProvider);
+      if (user != null) {
+        ref.invalidate(mapDataProvider(user.id));
+        ref.invalidate(activeIncidentsProvider);
+      }
     }
   }
 

@@ -17,6 +17,8 @@ class IncidentNotificationService {
 
   final FlutterLocalNotificationsPlugin notificationPlugin;
   final Future<String> Function(String userId) getSubjectDisplayName;
+  /// Called when a new incident notification is shown (Realtime or missed check). Set from app to refresh UI.
+  void Function()? onIncidentShown;
 
   RealtimeChannel? _channel;
   String? _userId;
@@ -117,6 +119,7 @@ class IncidentNotificationService {
   Future<void> _showNotificationForIncident(String incidentId) async {
     if (_notifiedIncidentIds.contains(incidentId)) return;
     _notifiedIncidentIds.add(incidentId);
+    onIncidentShown?.call();
 
     // Fetch subject's user_id from incident
     final incidentRes = await Supabase.instance.client
@@ -148,8 +151,11 @@ class IncidentNotificationService {
       android: androidDetails,
       iOS: iosDetails,
     );
+    // Use unique ID per incident so multiple notifications don't overwrite each other
+    final notificationId = incidentEmergencyNotificationId +
+        (incidentId.hashCode & 0x7FFF).clamp(0, 32767);
     await notificationPlugin.show(
-      incidentEmergencyNotificationId,
+      notificationId,
       title,
       body,
       details,

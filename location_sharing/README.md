@@ -6,7 +6,8 @@ A consent-first mobile app that tracks your location on-device and shares it onl
 
 - **Privacy first**: Location is stored locally; nothing is uploaded until an incident is triggered or you opt into always-share. See [docs/TECHNICAL_SPEC.md](docs/TECHNICAL_SPEC.md).
 - **Backend: Supabase**: Auth, Postgres with RLS, Edge Functions for escalation, and Realtime for incident updates. RLS keeps "who can see what" in one place and fits incident-scoped access. See schema in [docs/SCHEMA.md](docs/SCHEMA.md).
-- **Map: Google Maps**: `google_maps_flutter` for map screen, markers, and incident polylines. Simple setup and good Flutter support.
+- **Map: Google Maps**: `google_maps_flutter` for map screen, markers, and incident polylines (including path-point markers on incident detail). Simple setup and good Flutter support.
+- **Incident UX**: Home shows an "Active incidents" card when you have incidents; incident detail shows the subject's name and path markers. Resolving or confirming safe refreshes Home and Map. "I couldn't reach them" triggers escalation to the next layer.
 
 ### Escalation order: "Closest → furthest"
 
