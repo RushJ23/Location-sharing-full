@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -19,6 +21,7 @@ class IncidentNotificationService {
   RealtimeChannel? _channel;
   String? _userId;
   bool _channelCreated = false;
+  final Set<String> _notifiedIncidentIds = {};
 
   Future<void> _ensureChannel() async {
     if (_channelCreated) return;
@@ -40,6 +43,9 @@ class IncidentNotificationService {
     await stop();
     _userId = userId;
 
+    // Subscribe without filter: Realtime filters on UUID can fail silently.
+    // RLS ensures we only receive rows where contact_user_id = auth.uid();
+    // we also filter in _onInsert for contact_user_id == userId.
     final client = Supabase.instance.client;
     _channel = client
         .channel('incident_access_$userId')
@@ -47,29 +53,70 @@ class IncidentNotificationService {
           event: PostgresChangeEvent.insert,
           schema: 'public',
           table: 'incident_access',
-          filter: PostgresChangeFilter(
-            type: PostgresChangeFilterType.eq,
-            column: 'contact_user_id',
-            value: userId,
-          ),
-          callback: _onInsert,
+          callback: (payload) => _onInsert(payload, userId),
         )
         .subscribe();
+
+    // Catch any incident_access rows we missed (e.g. app was closed).
+    unawaited(checkForMissedNotifications());
   }
 
   Future<void> stop() async {
     await _channel?.unsubscribe();
     _channel = null;
     _userId = null;
+    _notifiedIncidentIds.clear();
   }
 
-  Future<void> _onInsert(PostgresChangePayload payload) async {
+  /// Call on app resume to catch incident_access rows we may have missed
+  /// (e.g. Realtime disconnected, app was backgrounded).
+  Future<void> checkForMissedNotifications() async {
+    final userId = _userId;
+    if (userId == null) return;
+
+    try {
+      final res = await Supabase.instance.client
+          .from('incident_access')
+          .select('incident_id')
+          .eq('contact_user_id', userId)
+          .gte('notified_at', DateTime.now()
+              .subtract(const Duration(hours: 1))
+              .toUtc()
+              .toIso8601String());
+
+      final rows = res as List<dynamic>? ?? [];
+      for (final row in rows) {
+        final incidentId = (row as Map<String, dynamic>)['incident_id']?.toString();
+        if (incidentId != null &&
+            incidentId.isNotEmpty &&
+            !_notifiedIncidentIds.contains(incidentId)) {
+          await _showNotificationForIncident(incidentId);
+        }
+      }
+    } catch (_) {
+      // Ignore; will retry on next resume
+    }
+  }
+
+  Future<void> _onInsert(PostgresChangePayload payload, String userId) async {
     final newRecord = payload.newRecord;
-    if (newRecord == null) return;
+    if (newRecord.isEmpty) return;
+
+    // RLS should limit to our rows, but double-check contact_user_id
+    final rawContactId = newRecord['contact_user_id'];
+    final contactId = rawContactId is String ? rawContactId : rawContactId?.toString();
+    if (contactId != userId) return;
 
     final rawId = newRecord['incident_id'];
     final incidentId = rawId is String ? rawId : rawId?.toString();
     if (incidentId == null || incidentId.isEmpty) return;
+
+    await _showNotificationForIncident(incidentId);
+  }
+
+  Future<void> _showNotificationForIncident(String incidentId) async {
+    if (_notifiedIncidentIds.contains(incidentId)) return;
+    _notifiedIncidentIds.add(incidentId);
 
     // Fetch subject's user_id from incident
     final incidentRes = await Supabase.instance.client
@@ -110,7 +157,7 @@ class IncidentNotificationService {
     );
   }
 
-  /// Create and show the notification (for external use, e.g. FCM payload).
+  /// Static helper for external use (e.g. FCM payload).
   static Future<void> showIncidentEmergencyNotification(
     FlutterLocalNotificationsPlugin plugin, {
     required String title,

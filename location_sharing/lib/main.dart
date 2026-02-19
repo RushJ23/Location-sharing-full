@@ -196,7 +196,30 @@ class LocationSharingApp extends ConsumerStatefulWidget {
   ConsumerState<LocationSharingApp> createState() => _LocationSharingAppState();
 }
 
-class _LocationSharingAppState extends ConsumerState<LocationSharingApp> {
+class _LocationSharingAppState extends ConsumerState<LocationSharingApp>
+    with WidgetsBindingObserver {
+  @override
+  void initState() {
+    super.initState();
+    if (AppEnv.supabaseUrl.isNotEmpty) {
+      Supabase.instance.client.auth.onAuthStateChange.listen(_onAuthChange);
+      WidgetsBinding.instance.addObserver(this);
+    }
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      widget.incidentNotifier.checkForMissedNotifications();
+    }
+  }
+
   void _onAuthChange(dynamic state) {
     widget.authRefresh.refresh();
     final session = (state as dynamic).session;
@@ -206,14 +229,6 @@ class _LocationSharingAppState extends ConsumerState<LocationSharingApp> {
       widget.incidentNotifier.start(userId);
     } else {
       widget.incidentNotifier.stop();
-    }
-  }
-
-  @override
-  void initState() {
-    super.initState();
-    if (AppEnv.supabaseUrl.isNotEmpty) {
-      Supabase.instance.client.auth.onAuthStateChange.listen(_onAuthChange);
     }
   }
 
