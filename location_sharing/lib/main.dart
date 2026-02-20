@@ -2,10 +2,13 @@ import 'dart:async';
 
 import 'package:app_links/app_links.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:go_router/go_router.dart';
+import 'package:location_sharing/data/repositories/always_share_repository.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:workmanager/workmanager.dart';
 import 'package:timezone/data/latest.dart' as tz_data;
 
 import 'core/auth/auth_providers.dart';
@@ -23,6 +26,8 @@ import 'data/repositories/pending_safety_check_repository.dart';
 import 'features/safety/domain/curfew_scheduler.dart';
 import 'features/safety/domain/safety_notification_service.dart';
 import 'features/safety/providers/location_providers.dart' as safety_providers;
+import 'features/split_up/domain/split_up_notification_service.dart';
+import 'core/background/incident_notification_background.dart' as incident_bg;
 
 void _handleIncidentDeepLink(Uri uri, GoRouter router) {
   final incidentId = uri.pathSegments[1];
@@ -59,6 +64,11 @@ void main() async {
       url: AppEnv.supabaseUrl,
       anonKey: AppEnv.supabaseAnonKey,
     );
+    try {
+      await Workmanager().initialize(incident_bg.callbackDispatcher);
+    } on PlatformException catch (_) {
+      // Workmanager only supports Android/iOS; ignore on other platforms.
+    }
   }
   final authRefresh = AuthRefreshNotifier();
   final router = createAppRouter(authRefresh);
@@ -155,12 +165,43 @@ void main() async {
     }
     tryNavigate();
   };
+  final splitUpService = SplitUpNotificationService(
+    alwaysShareRepository: AlwaysShareRepository(),
+  );
+  splitUpService.onNoLongerWith = (displayName) {
+    if (WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed) {
+      final ctx = rootNavigatorKey.currentContext;
+      if (ctx != null) {
+        ScaffoldMessenger.of(ctx).showSnackBar(
+          SnackBar(content: Text('You are no longer with $displayName.')),
+        );
+      }
+    } else {
+      safetyNotifications.showSplitUpNotification(displayName);
+    }
+  };
   if (AppEnv.supabaseUrl.isNotEmpty) {
     final session = Supabase.instance.client.auth.currentSession;
     if (session != null) {
       curfewScheduler.rescheduleAllForUser(session.user.id);
       incidentNotifier.start(session.user.id);
+      splitUpService.start(session.user.id);
       unawaited(incidentNotifier.checkForMissedNotifications());
+      unawaited(incident_bg.persistIncidentBackgroundSession(
+        supabaseUrl: AppEnv.supabaseUrl,
+        anonKey: AppEnv.supabaseAnonKey,
+        userId: session.user.id,
+        accessToken: session.accessToken,
+      ));
+      try {
+        await Workmanager().registerPeriodicTask(
+          incident_bg.incidentCheckTaskName,
+          incident_bg.incidentCheckTaskName,
+          frequency: const Duration(minutes: 5),
+        );
+      } on PlatformException catch (_) {
+        // Workmanager only supports Android/iOS; ignore on other platforms.
+      }
     }
   }
   runApp(
@@ -168,6 +209,7 @@ void main() async {
       overrides: [
         safety_providers.safetyNotificationServiceProvider.overrideWithValue(safetyNotifications),
         safety_providers.curfewSchedulerProvider.overrideWithValue(curfewScheduler),
+        splitUpNotificationServiceProvider.overrideWithValue(splitUpService),
       ],
       child: LocationSharingApp(
         router: router,
@@ -231,6 +273,21 @@ class _LocationSharingAppState extends ConsumerState<LocationSharingApp>
         ref.invalidate(mapDataProvider(user.id));
         ref.invalidate(activeIncidentsProvider);
       }
+    } else if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.inactive) {
+      // Run immediately so we can show notification before iOS suspends the app.
+      widget.incidentNotifier.checkForMissedNotifications();
+      // Also schedule a one-off background check (helps on Android; iOS may run it opportunistically).
+      try {
+        Workmanager().registerOneOffTask(
+          incident_bg.incidentCheckOneOffTaskName,
+          incident_bg.incidentCheckTaskName,
+          initialDelay: const Duration(seconds: 15),
+        );
+      } on PlatformException catch (_) {}
+      Future.delayed(const Duration(seconds: 2), () {
+        widget.incidentNotifier.checkForMissedNotifications();
+      });
     }
   }
 
@@ -239,10 +296,29 @@ class _LocationSharingAppState extends ConsumerState<LocationSharingApp>
     final session = (state as dynamic).session;
     if (session != null) {
       final userId = (session.user as dynamic).id as String;
+      final accessToken = (session as dynamic).accessToken as String?;
       widget.curfewScheduler.rescheduleAllForUser(userId);
       widget.incidentNotifier.start(userId);
+      unawaited(incident_bg.persistIncidentBackgroundSession(
+        supabaseUrl: AppEnv.supabaseUrl,
+        anonKey: AppEnv.supabaseAnonKey,
+        userId: userId,
+        accessToken: accessToken ?? '',
+      ));
+      unawaited(
+        Workmanager()
+            .registerPeriodicTask(
+              incident_bg.incidentCheckTaskName,
+              incident_bg.incidentCheckTaskName,
+              frequency: const Duration(minutes: 5),
+            )
+            .catchError((Object _) {
+          // Workmanager only supports Android/iOS; ignore on other platforms.
+        }),
+      );
     } else {
       widget.incidentNotifier.stop();
+      unawaited(incident_bg.clearIncidentBackgroundSession());
     }
   }
 
@@ -252,25 +328,30 @@ class _LocationSharingAppState extends ConsumerState<LocationSharingApp>
     final updater = ref.watch(alwaysShareLocationUpdaterProvider);
     final locationTracker = ref.watch(safety_providers.locationTrackingServiceProvider);
     final incidentSubjectUpdater = ref.watch(incidentSubjectLocationUpdaterProvider);
+    final splitUpService = ref.watch(splitUpNotificationServiceProvider);
     ref.listen(currentUserProvider, (prev, next) {
       if (next != null) {
         updater.start(next.id);
         locationTracker.startTracking(userId: next.id);
         incidentSubjectUpdater.start();
+        splitUpService.start(next.id);
       } else {
         updater.stop();
         locationTracker.stopTracking();
         incidentSubjectUpdater.stop();
+        splitUpService.stop();
       }
     });
     if (user != null && !updater.isRunning) {
       updater.start(user.id);
       locationTracker.startTracking(userId: user.id);
       incidentSubjectUpdater.start();
+      splitUpService.start(user.id);
     } else if (user == null) {
       if (updater.isRunning) updater.stop();
       if (locationTracker.isTracking) locationTracker.stopTracking();
       incidentSubjectUpdater.stop();
+      splitUpService.stop();
     }
     return MaterialApp.router(
       title: 'Location Sharing',

@@ -23,18 +23,18 @@ class IncidentRepository {
         .toList();
   }
 
-  /// Creates an incident, uploads last 12h location history, and creates
-  /// incident_access for Layer 1 contacts (order determined by escalation logic).
+  /// Creates an incident and uploads last 12h location history. Layer 1 is added to
+  /// incident_access by a DB trigger on INSERT, so contacts see the incident when they
+  /// open the app (works for both "I need help" and curfew-triggered incidents).
   Future<Incident?> createIncident({
     required String userId,
     required String trigger,
     required double? lastKnownLat,
     required double? lastKnownLng,
     required List<LocationSample> locationSamples,
-    required List<String> layer1ContactUserIds,
   }) async {
     if (_client == null) return null;
-    final res = await _client.from('incidents').insert({
+    final res = await _client!.from('incidents').insert({
       'user_id': userId,
       'status': 'active',
       'trigger': trigger,
@@ -50,21 +50,13 @@ class IncidentRepository {
         'timestamp': sample.timestamp.toIso8601String(),
       });
     }
-    for (final contactUserId in layer1ContactUserIds) {
-      await _client.from('incident_access').insert({
-        'incident_id': incident.id,
-        'contact_user_id': contactUserId,
-        'layer': 1,
-        'notified_at': DateTime.now().toIso8601String(),
-      });
-    }
     try {
       await _client.functions.invoke('escalate', body: {
         'incident_id': incident.id,
         'layer': 1,
       });
     } catch (_) {
-      // Escalate push may fail if FCM not configured
+      // Trigger already added Layer 1; escalate used by cron for Layer 2/3
     }
     return incident;
   }
@@ -103,6 +95,21 @@ class IncidentRepository {
     return List<Map<String, dynamic>>.from(
       (res as List).map((e) => Map<String, dynamic>.from(e as Map)),
     );
+  }
+
+  /// Emergency override: when incident has no subject_current_*, returns the subject's
+  /// always_share_locations row so the map can show current location (overrides normal
+  /// always-share visibility; only allowed for active incidents the caller has access to).
+  Future<({double lat, double lng})?> getSubjectFallbackLocationForIncident(String incidentId) async {
+    if (_client == null) return null;
+    final res = await _client.rpc('get_subject_location_for_incident', params: {'p_incident_id': incidentId});
+    final list = res is List ? res : (res != null ? [res] : <dynamic>[]);
+    if (list.isEmpty) return null;
+    final row = list.first as Map<String, dynamic>;
+    final lat = (row['lat'] as num?)?.toDouble();
+    final lng = (row['lng'] as num?)?.toDouble();
+    if (lat == null || lng == null) return null;
+    return (lat: lat, lng: lng);
   }
 
   /// Updates subject's current location for an active incident (live tracking during incident).
@@ -174,7 +181,7 @@ class IncidentRepository {
         'layer': layer,
       });
     } catch (_) {
-      // Escalate may fail if FCM not configured
+      // Escalate may fail if Edge Function not available
     }
   }
 }

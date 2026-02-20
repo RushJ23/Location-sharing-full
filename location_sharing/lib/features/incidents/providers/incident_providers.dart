@@ -25,6 +25,12 @@ final incidentSubjectDisplayNameProvider = FutureProvider.family<String, String>
   return name != null && name.isNotEmpty ? name : 'Someone';
 });
 
+/// Emergency fallback: subject's always_share location for this incident when subject_current_* is null.
+/// Only returns data for active incidents the current user has access to.
+final subjectFallbackLocationProvider = FutureProvider.family<({double lat, double lng})?, String>((ref, incidentId) async {
+  return ref.read(incidentRepositoryProvider).getSubjectFallbackLocationForIncident(incidentId);
+});
+
 final incidentSubjectLocationUpdaterProvider = Provider<IncidentSubjectLocationUpdater>((ref) {
   return IncidentSubjectLocationUpdater(
     incidentRepo: ref.watch(incidentRepositoryProvider),

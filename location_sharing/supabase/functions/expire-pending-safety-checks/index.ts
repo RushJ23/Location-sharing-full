@@ -17,24 +17,19 @@ Deno.serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
+    const supabaseUrl = Deno.env.get('SUPABASE_URL');
+    const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+    const escalateUrl = `${supabaseUrl}/functions/v1/escalate`;
+    let processed = 0;
+
     const { data: expired } = await supabase
       .from('pending_safety_checks')
       .select('id, user_id, schedule_id')
       .lte('expires_at', new Date().toISOString())
       .is('responded_at', null);
 
-    if (!expired || expired.length === 0) {
-      return new Response(JSON.stringify({ ok: true, processed: 0 }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
-
-    const supabaseUrl = Deno.env.get('SUPABASE_URL');
-    const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
-    const escalateUrl = `${supabaseUrl}/functions/v1/escalate`;
-    let processed = 0;
-
-    for (const row of expired) {
+    const expiredList = expired ?? [];
+    for (const row of expiredList) {
       const userId = row.user_id;
 
       const { data: samples } = await supabase
@@ -106,34 +101,46 @@ Deno.serve(async (req) => {
       processed++;
     }
 
-    const tenMinAgo = new Date(Date.now() - 10 * 60 * 1000).toISOString();
-    const twentyMinAgo = new Date(Date.now() - 20 * 60 * 1000).toISOString();
+    const nowMs = Date.now();
+    const tenMinAgoMs = nowMs - 10 * 60 * 1000;
+    const twentyMinAgoMs = nowMs - 20 * 60 * 1000;
 
     const { data: activeIncidents } = await supabase
       .from('incidents')
       .select('id, created_at')
       .eq('status', 'active');
 
+    const invokeEscalate = async (incidentId: string, layer: number): Promise<boolean> => {
+      try {
+        const res = await fetch(escalateUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${serviceKey}`,
+          },
+          body: JSON.stringify({ incident_id: incidentId, layer }),
+        });
+        return res.ok;
+      } catch {
+        return false;
+      }
+    };
+
     for (const inc of activeIncidents ?? []) {
-      const created = (inc as { created_at: string }).created_at;
-      if (created <= twentyMinAgo) {
-        await fetch(escalateUrl, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${serviceKey}`,
-          },
-          body: JSON.stringify({ incident_id: inc.id, layer: 3 }),
-        });
-      } else if (created <= tenMinAgo) {
-        await fetch(escalateUrl, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${serviceKey}`,
-          },
-          body: JSON.stringify({ incident_id: inc.id, layer: 2 }),
-        });
+      const raw = (inc as { created_at?: string }).created_at;
+      if (!raw || typeof raw !== 'string') continue;
+      // Ensure UTC parsing. PostgREST returns "2026-02-19 23:36:58.384268+00" (short
+      // TZ) or "2026-02-19 23:00:00" (none). Only append Z when there's no TZ - our
+      // previous regex missed "+00" and produced invalid "+00Z", causing NaN/skip.
+      const hasTz = /[Zz]|[+-]\d{1,2}(:?\d{2})?$/.test(raw);
+      const utcStr = hasTz ? raw : raw.replace(' ', 'T') + 'Z';
+      const createdMs = new Date(utcStr).getTime();
+      if (Number.isNaN(createdMs)) continue;
+      if (createdMs <= twentyMinAgoMs) {
+        await invokeEscalate(inc.id, 2);
+        await invokeEscalate(inc.id, 3);
+      } else if (createdMs <= tenMinAgoMs) {
+        await invokeEscalate(inc.id, 2);
       }
     }
 

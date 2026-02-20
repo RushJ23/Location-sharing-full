@@ -9,7 +9,6 @@ class Profile {
     this.avatarUrl,
     this.phone,
     this.school,
-    this.fcmToken,
     required this.createdAt,
     required this.updatedAt,
   });
@@ -19,7 +18,6 @@ class Profile {
   final String? avatarUrl;
   final String? phone;
   final String? school;
-  final String? fcmToken;
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -30,7 +28,6 @@ class Profile {
       avatarUrl: json['avatar_url'] as String?,
       phone: json['phone'] as String?,
       school: json['school'] as String?,
-      fcmToken: json['fcm_token'] as String?,
       createdAt: DateTime.parse(json['created_at'] as String),
       updatedAt: DateTime.parse(json['updated_at'] as String),
     );
@@ -42,7 +39,6 @@ class Profile {
         'avatar_url': avatarUrl,
         'phone': phone,
         'school': school,
-        'fcm_token': fcmToken,
         'created_at': createdAt.toIso8601String(),
         'updated_at': updatedAt.toIso8601String(),
       };
@@ -73,7 +69,6 @@ class ProfileRepository {
             'avatar_url': profile.avatarUrl,
             'phone': profile.phone,
             'school': profile.school,
-            'fcm_token': profile.fcmToken,
             'updated_at': DateTime.now().toIso8601String(),
           },
           onConflict: 'id',
@@ -86,7 +81,6 @@ class ProfileRepository {
     String? avatarUrl,
     String? phone,
     String? school,
-    String? fcmToken,
   }) async {
     if (AppEnv.supabaseUrl.isEmpty) return;
     final updates = <String, dynamic>{'updated_at': DateTime.now().toIso8601String()};
@@ -94,7 +88,6 @@ class ProfileRepository {
     if (avatarUrl != null) updates['avatar_url'] = avatarUrl;
     if (phone != null) updates['phone'] = phone;
     if (school != null) updates['school'] = school;
-    if (fcmToken != null) updates['fcm_token'] = fcmToken;
     await _client.from('profiles').update(updates).eq('id', userId);
   }
 }

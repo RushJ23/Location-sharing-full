@@ -163,7 +163,7 @@ class IncidentNotificationService {
     );
   }
 
-  /// Static helper for external use (e.g. FCM payload).
+  /// Static helper for external use (e.g. deep link payload).
   static Future<void> showIncidentEmergencyNotification(
     FlutterLocalNotificationsPlugin plugin, {
     required String title,

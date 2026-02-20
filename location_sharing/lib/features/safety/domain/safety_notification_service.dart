@@ -1,4 +1,7 @@
+import 'dart:io' show Platform;
+
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:timezone/timezone.dart' as tz;
 
 import '../../incidents/domain/incident_notification_service.dart';
@@ -8,6 +11,14 @@ const int safetyCheckNotificationId = 1;
 const String safetyCheckChannelId = 'safety_check';
 const String actionSafe = 'safe';
 const String actionNeedHelp = 'need_help';
+
+/// Ids for split-up "You are no longer with [name]" notification.
+const String splitUpChannelId = 'split_up';
+const int splitUpNotificationId = 2;
+
+/// Id for "Incident created" confirmation (creator's device).
+const String incidentCreatedChannelId = 'incident_created';
+const int incidentCreatedNotificationId = 3;
 
 /// Notification details used for both immediate and scheduled curfew notifications.
 NotificationDetails get _safetyCheckNotificationDetails {
@@ -67,6 +78,22 @@ class SafetyNotificationService {
       onDidReceiveNotificationResponse: _onNotificationResponse,
     );
     await _createChannel();
+    await _requestNotificationPermission();
+  }
+
+  /// Request notification permission so incident and safety notifications can be shown.
+  Future<void> _requestNotificationPermission() async {
+    if (Platform.isIOS) {
+      await _plugin
+          .resolvePlatformSpecificImplementation<IOSFlutterLocalNotificationsPlugin>()
+          ?.requestPermissions(alert: true, badge: true, sound: true);
+    }
+    if (Platform.isAndroid) {
+      final status = await Permission.notification.status;
+      if (status.isDenied) {
+        await Permission.notification.request();
+      }
+    }
   }
 
   Future<void> _createChannel() async {
@@ -79,6 +106,86 @@ class SafetyNotificationService {
     await _plugin
         .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
         ?.createNotificationChannel(channel);
+  }
+
+  bool _incidentCreatedChannelCreated = false;
+
+  Future<void> _ensureIncidentCreatedChannel() async {
+    if (_incidentCreatedChannelCreated) return;
+    const channel = AndroidNotificationChannel(
+      incidentCreatedChannelId,
+      'Incident updates',
+      description: 'When you create or are notified about an incident',
+      importance: Importance.high,
+    );
+    await _plugin
+        .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
+        ?.createNotificationChannel(channel);
+    _incidentCreatedChannelCreated = true;
+  }
+
+  /// Shows a local notification on the creator's device after they create an incident
+  /// (same process as curfew: flutter_local_notifications, no Firebase).
+  Future<void> showIncidentCreatedConfirmation() async {
+    await _ensureIncidentCreatedChannel();
+    const androidDetails = AndroidNotificationDetails(
+      incidentCreatedChannelId,
+      'Incident updates',
+      channelDescription: 'When you create or are notified about an incident',
+      importance: Importance.high,
+      priority: Priority.high,
+    );
+    const iosDetails = DarwinNotificationDetails(
+      presentAlert: true,
+      presentBadge: true,
+    );
+    const details = NotificationDetails(android: androidDetails, iOS: iosDetails);
+    await _plugin.show(
+      incidentCreatedNotificationId,
+      'Incident created',
+      'Your contacts have been notified.',
+      details,
+    );
+  }
+
+  bool _splitUpChannelCreated = false;
+
+  Future<void> _ensureSplitUpChannel() async {
+    if (_splitUpChannelCreated) return;
+    const channel = AndroidNotificationChannel(
+      splitUpChannelId,
+      'Split-up alerts',
+      description: 'When you are no longer near someone who shares location with you',
+      importance: Importance.defaultImportance,
+    );
+    await _plugin
+        .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
+        ?.createNotificationChannel(channel);
+    _splitUpChannelCreated = true;
+  }
+
+  /// Shows a local notification when the user has moved beyond 50m of a contact
+  /// who was sharing location (e.g. app in background). No tap callback required.
+  Future<void> showSplitUpNotification(String displayName) async {
+    await _ensureSplitUpChannel();
+    const androidDetails = AndroidNotificationDetails(
+      splitUpChannelId,
+      'Split-up alerts',
+      channelDescription: 'When you are no longer near someone who shares location with you',
+      importance: Importance.defaultImportance,
+      priority: Priority.defaultPriority,
+    );
+    const iosDetails = DarwinNotificationDetails(
+      presentAlert: true,
+      presentBadge: true,
+    );
+    const details = NotificationDetails(android: androidDetails, iOS: iosDetails);
+    await _plugin.show(
+      splitUpNotificationId,
+      'You are no longer with $displayName',
+      '',
+      details,
+    );
   }
 
   void _onNotificationResponse(NotificationResponse response) {

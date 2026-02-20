@@ -56,130 +56,129 @@ class IncidentDetailScreen extends ConsumerWidget {
           }
           final user = ref.watch(currentUserProvider);
           final isSubject = user?.id == incident.userId;
-          return ListView(
-            padding: const EdgeInsets.all(20),
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Card(
-                child: Padding(
+              SizedBox(
+                height: 320,
+                child: ClipRRect(
+                  borderRadius: const BorderRadius.vertical(bottom: Radius.circular(12)),
+                  child: _IncidentMap(incidentId: incidentId, incident: incident),
+                ),
+              ),
+              Expanded(
+                child: ListView(
                   padding: const EdgeInsets.all(20),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Icon(
-                            incident.isActive
-                                ? Icons.warning_amber_rounded
-                                : Icons.check_circle_outline_rounded,
-                            color: incident.isActive
-                                ? theme.colorScheme.tertiary
-                                : theme.colorScheme.primary,
-                            size: 28,
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Card(
+                      child: Padding(
+                        padding: const EdgeInsets.all(20),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
                               children: [
-                                Text(
-                                  'Status',
-                                  style: theme.textTheme.labelMedium?.copyWith(
-                                    color: theme.colorScheme.onSurfaceVariant,
-                                  ),
+                                Icon(
+                                  incident.isActive
+                                      ? Icons.warning_amber_rounded
+                                      : Icons.check_circle_outline_rounded,
+                                  color: incident.isActive
+                                      ? theme.colorScheme.tertiary
+                                      : theme.colorScheme.primary,
+                                  size: 28,
                                 ),
-                                Text(
-                                  incident.status,
-                                  style: theme.textTheme.titleMedium?.copyWith(
-                                    fontWeight: FontWeight.w600,
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        'Status',
+                                        style: theme.textTheme.labelMedium?.copyWith(
+                                          color: theme.colorScheme.onSurfaceVariant,
+                                        ),
+                                      ),
+                                      Text(
+                                        incident.status,
+                                        style: theme.textTheme.titleMedium?.copyWith(
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                    ],
                                   ),
                                 ),
                               ],
                             ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 16),
-                      const Divider(),
-                      const SizedBox(height: 12),
-                      _DetailRow(
-                        icon: Icons.flash_on_rounded,
-                        label: 'Trigger',
-                        value: incident.trigger,
-                      ),
-                      if (incident.lastKnownLat != null &&
-                          incident.lastKnownLng != null) ...[
-                        const SizedBox(height: 8),
-                        _DetailRow(
-                          icon: Icons.place_rounded,
-                          label: 'Last known location',
-                          value:
-                              '${incident.lastKnownLat!.toStringAsFixed(4)}, '
-                              '${incident.lastKnownLng!.toStringAsFixed(4)}',
+                            const SizedBox(height: 16),
+                            const Divider(),
+                            const SizedBox(height: 12),
+                            _DetailRow(
+                              icon: Icons.flash_on_rounded,
+                              label: 'Trigger',
+                              value: incident.trigger,
+                            ),
+                            if (incident.lastKnownLat != null &&
+                                incident.lastKnownLng != null) ...[
+                              const SizedBox(height: 8),
+                              _DetailRow(
+                                icon: Icons.place_rounded,
+                                label: 'Last known location',
+                                value:
+                                    '${incident.lastKnownLat!.toStringAsFixed(4)}, '
+                                    '${incident.lastKnownLng!.toStringAsFixed(4)}',
+                              ),
+                            ],
+                          ],
                         ),
-                      ],
+                      ),
+                    ),
+                    if (incident.isActive && isSubject) ...[
+                      const SizedBox(height: 24),
+                      Text(
+                        'Resolve this incident',
+                        style: theme.textTheme.titleSmall?.copyWith(
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      FilledButton.icon(
+                        onPressed: () => _markSelfSafe(context, ref),
+                        icon: const Icon(Icons.check_circle_outline, size: 20),
+                        label: const Text('I am safe'),
+                        style: FilledButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                        ),
+                      ),
+                      const SizedBox(height: 24),
                     ],
-                  ),
-                ),
-              ),
-              if (incident.isActive && isSubject) ...[
-                const SizedBox(height: 24),
-                Text(
-                  'Resolve this incident',
-                  style: theme.textTheme.titleSmall?.copyWith(
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-                const SizedBox(height: 12),
-                FilledButton.icon(
-                  onPressed: () => _markSelfSafe(context, ref),
-                  icon: const Icon(Icons.check_circle_outline, size: 20),
-                  label: const Text('I am safe'),
-                  style: FilledButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                  ),
-                ),
-                const SizedBox(height: 24),
-              ],
-              if (incident.isActive && !isSubject) ...[
-                const SizedBox(height: 24),
-                Text(
-                  'As a contact you can:',
-                  style: theme.textTheme.titleSmall?.copyWith(
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-                const SizedBox(height: 12),
-                FilledButton.icon(
-                  onPressed: () => _confirmSafe(context, ref),
-                  icon: const Icon(Icons.check_circle_rounded, size: 20),
-                  label: const Text('I confirm they\'re safe'),
-                  style: FilledButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                  ),
-                ),
-                const SizedBox(height: 8),
-                OutlinedButton.icon(
-                  onPressed: () => _couldNotReach(ref),
-                  icon: const Icon(Icons.cancel_outlined, size: 20),
-                  label: const Text('I couldn\'t reach them'),
-                  style: OutlinedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                  ),
-                ),
-              ],
-              const SizedBox(height: 24),
-              Text(
-                'Location path (last 12h)',
-                style: theme.textTheme.titleSmall?.copyWith(
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-              const SizedBox(height: 8),
-              SizedBox(
-                height: 200,
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(12),
-                  child: _IncidentMap(incidentId: incidentId, incident: incident),
+                    if (incident.isActive && !isSubject) ...[
+                      const SizedBox(height: 24),
+                      Text(
+                        'As a contact you can:',
+                        style: theme.textTheme.titleSmall?.copyWith(
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      FilledButton.icon(
+                        onPressed: () => _confirmSafe(context, ref),
+                        icon: const Icon(Icons.check_circle_rounded, size: 20),
+                        label: const Text('I confirm they\'re safe'),
+                        style: FilledButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      OutlinedButton.icon(
+                        onPressed: () => _couldNotReach(ref),
+                        icon: const Icon(Icons.cancel_outlined, size: 20),
+                        label: const Text('I couldn\'t reach them'),
+                        style: OutlinedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                        ),
+                      ),
+                    ],
+                  ],
                 ),
               ),
             ],
@@ -306,13 +305,30 @@ class _IncidentMapState extends ConsumerState<_IncidentMap> {
     await c.animateCamera(CameraUpdate.newLatLngZoom(target, 15));
   }
 
+  Future<void> _zoomIn() async {
+    final c = await _controller.future;
+    await c.animateCamera(CameraUpdate.zoomIn());
+  }
+
+  Future<void> _zoomOut() async {
+    final c = await _controller.future;
+    await c.animateCamera(CameraUpdate.zoomOut());
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final pathAsync = ref.watch(_incidentPathProvider(widget.incidentId));
+    final fallbackAsync = ref.watch(subjectFallbackLocationProvider(widget.incidentId));
+    final fallback = fallbackAsync.valueOrNull;
+    final effectiveCurrentLat = widget.incident.subjectCurrentLat ?? fallback?.lat;
+    final effectiveCurrentLng = widget.incident.subjectCurrentLng ?? fallback?.lng;
+    final hasSubjectCurrent = effectiveCurrentLat != null && effectiveCurrentLng != null;
+    final isFallbackCurrent = hasSubjectCurrent && widget.incident.subjectCurrentLat == null;
     return pathAsync.when(
       data: (path) {
-        if (path.isEmpty && widget.incident.subjectCurrentLat == null) {
+        final hasLastKnown = widget.incident.lastKnownLat != null && widget.incident.lastKnownLng != null;
+        if (path.isEmpty && !hasSubjectCurrent && !hasLastKnown) {
           return const Center(child: Text('No location history'));
         }
         final points = path
@@ -334,66 +350,128 @@ class _IncidentMapState extends ConsumerState<_IncidentMap> {
             } catch (_) {}
           }
         }
+        final lastTs = pointsWithTime.isNotEmpty
+            ? pointsWithTime.last.timestamp
+            : DateTime.now();
+        final fallbackLatLng = hasLastKnown
+            ? LatLng(widget.incident.lastKnownLat!, widget.incident.lastKnownLng!)
+            : const LatLng(40.44, -79.94);
+
+        /// Position for "X hours ago": from path (closest point to lastTs - Xh), or interpolated when path is short.
+        LatLng positionForHoursAgo(int hours) {
+          final targetTs = lastTs.subtract(Duration(hours: hours));
+          if (pointsWithTime.isNotEmpty) {
+            LatLng best = pointsWithTime.first.point;
+            Duration bestDiff = const Duration(hours: 24);
+            for (final pt in pointsWithTime) {
+              final d = (pt.timestamp.difference(targetTs)).abs();
+              if (d < bestDiff) {
+                bestDiff = d;
+                best = pt.point;
+              }
+            }
+            return best;
+          }
+          // No path data: interpolate from "12h ago" = fallback to "now" = current
+          final current = hasSubjectCurrent
+              ? LatLng(effectiveCurrentLat!, effectiveCurrentLng!)
+              : (hasLastKnown
+                  ? LatLng(widget.incident.lastKnownLat!, widget.incident.lastKnownLng!)
+                  : fallbackLatLng);
+          if (!hasSubjectCurrent && !hasLastKnown) return fallbackLatLng;
+          final t = (12 - hours) / 12; // 0 at 12h ago, 1 at now
+          return LatLng(
+            fallbackLatLng.latitude + t * (current.latitude - fallbackLatLng.latitude),
+            fallbackLatLng.longitude + t * (current.longitude - fallbackLatLng.longitude),
+          );
+        }
+
+        // 13 positions: 12h ago .. 1h ago (history) + current. Polyline connects them in that order.
+        final currentLatLng = hasSubjectCurrent
+            ? LatLng(effectiveCurrentLat!, effectiveCurrentLng!)
+            : (hasLastKnown
+                ? LatLng(widget.incident.lastKnownLat!, widget.incident.lastKnownLng!)
+                : fallbackLatLng);
+        final lineOrder = <LatLng>[
+          for (int h = 12; h >= 1; h--) positionForHoursAgo(h),
+          currentLatLng,
+        ]; // 13 points: 12h, 11h, ..., 1h, current
+        final navChipPositions = List<LatLng>.generate(12, (i) => positionForHoursAgo(i + 1)); // 1h..12h for chips
+
         final center = points.isNotEmpty
             ? points[points.length ~/ 2]
-            : (widget.incident.subjectCurrentLat != null && widget.incident.subjectCurrentLng != null
-                ? LatLng(widget.incident.subjectCurrentLat!, widget.incident.subjectCurrentLng!)
-                : const LatLng(40.44, -79.94));
+            : currentLatLng;
 
         final Set<Marker> markers = {};
-        if (widget.incident.subjectCurrentLat != null && widget.incident.subjectCurrentLng != null) {
+        for (int h = 1; h <= 12; h++) {
+          final pos = navChipPositions[h - 1];
           markers.add(
             Marker(
-              markerId: const MarkerId('current'),
-              position: LatLng(widget.incident.subjectCurrentLat!, widget.incident.subjectCurrentLng!),
-              infoWindow: const InfoWindow(title: 'Current location', snippet: 'Live position'),
+              markerId: MarkerId('${h}h_ago'),
+              position: pos,
+              infoWindow: InfoWindow(title: '$h h ago', snippet: ''),
             ),
           );
         }
-        for (int i = 0; i < points.length; i++) {
-          final ts = path[i]['timestamp'];
-          final snippet = ts != null && ts is String ? ts : '';
-          markers.add(
-            Marker(
-              markerId: MarkerId('path_$i'),
-              position: points[i],
-              infoWindow: InfoWindow(title: 'Path point', snippet: snippet),
+        markers.add(
+          Marker(
+            markerId: const MarkerId('current'),
+            position: currentLatLng,
+            infoWindow: InfoWindow(
+              title: 'Current location',
+              snippet: hasSubjectCurrent
+                  ? (isFallbackCurrent ? 'From sharing (emergency)' : 'Live position')
+                  : (hasLastKnown ? 'Last known' : ''),
             ),
-          );
-        }
-
-        LatLng? pointForHoursAgo(int hours) {
-          if (pointsWithTime.isEmpty) return null;
-          final lastTs = pointsWithTime.last.timestamp;
-          final targetTs = lastTs.subtract(Duration(hours: hours));
-          LatLng? best;
-          Duration bestDiff = const Duration(hours: 24);
-          for (final pt in pointsWithTime) {
-            final d = (pt.timestamp.difference(targetTs)).abs();
-            if (d < bestDiff) {
-              bestDiff = d;
-              best = pt.point;
-            }
-          }
-          return best;
-        }
+          ),
+        );
 
         return Stack(
           children: [
             GoogleMap(
               initialCameraPosition: CameraPosition(target: center, zoom: 12),
               onMapCreated: _controller.complete,
-              polylines: points.length >= 2
+              polylines: lineOrder.length >= 2
                   ? {
                       Polyline(
                         polylineId: const PolylineId('path'),
-                        points: points,
+                        points: lineOrder,
                         color: theme.colorScheme.primary,
                         width: 4,
                       ),
                     }
                   : {},
               markers: markers,
+              zoomControlsEnabled: true,
+              zoomGesturesEnabled: true,
+              scrollGesturesEnabled: true,
+              tiltGesturesEnabled: true,
+            ),
+            Positioned(
+              right: 16,
+              bottom: 100,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Material(
+                    elevation: 2,
+                    child: IconButton(
+                      icon: const Icon(Icons.add),
+                      onPressed: _zoomIn,
+                      tooltip: 'Zoom in',
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Material(
+                    elevation: 2,
+                    child: IconButton(
+                      icon: const Icon(Icons.remove),
+                      onPressed: _zoomOut,
+                      tooltip: 'Zoom out',
+                    ),
+                  ),
+                ],
+              ),
             ),
             Positioned(
               top: 8,
@@ -418,43 +496,24 @@ class _IncidentMapState extends ConsumerState<_IncidentMap> {
                             ),
                           ),
                         ),
-                        if (widget.incident.subjectCurrentLat != null &&
-                            widget.incident.subjectCurrentLng != null)
+                        if (hasSubjectCurrent)
                           Padding(
                             padding: const EdgeInsets.only(right: 6),
                             child: FilterChip(
-                              label: const Text('Current location'),
+                              label: Text(isFallbackCurrent ? 'Current (from sharing)' : 'Current location'),
                               onSelected: (_) => _flyTo(LatLng(
-                                widget.incident.subjectCurrentLat!,
-                                widget.incident.subjectCurrentLng!,
+                                effectiveCurrentLat!,
+                                effectiveCurrentLng!,
                               )),
                               showCheckmark: false,
                             ),
                           ),
-                        if (pointForHoursAgo(2) != null)
+                        for (int h = 1; h <= 12; h++)
                           Padding(
                             padding: const EdgeInsets.only(right: 6),
                             child: FilterChip(
-                              label: const Text('2h ago'),
-                              onSelected: (_) => _flyTo(pointForHoursAgo(2)!),
-                              showCheckmark: false,
-                            ),
-                          ),
-                        if (pointForHoursAgo(6) != null)
-                          Padding(
-                            padding: const EdgeInsets.only(right: 6),
-                            child: FilterChip(
-                              label: const Text('6h ago'),
-                              onSelected: (_) => _flyTo(pointForHoursAgo(6)!),
-                              showCheckmark: false,
-                            ),
-                          ),
-                        if (pointForHoursAgo(12) != null)
-                          Padding(
-                            padding: const EdgeInsets.only(right: 6),
-                            child: FilterChip(
-                              label: const Text('12h ago'),
-                              onSelected: (_) => _flyTo(pointForHoursAgo(12)!),
+                              label: Text('${h}h ago'),
+                              onSelected: (_) => _flyTo(navChipPositions[h - 1]),
                               showCheckmark: false,
                             ),
                           ),

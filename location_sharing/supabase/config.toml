@@ -1,0 +1,3 @@
+# Edge Functions config: escalate must allow service_role key (cron calls it with service_role, not JWT)
+[functions.escalate]
+verify_jwt = false

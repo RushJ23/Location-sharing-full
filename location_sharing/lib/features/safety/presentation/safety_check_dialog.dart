@@ -98,7 +98,6 @@ class _SafetyCheckDialogContentState extends ConsumerState<_SafetyCheckDialogCon
     final incidentRepo = ref.read(incidentRepositoryProvider);
     final locationRepo = ref.read(locationHistoryRepositoryProvider);
     final samples = await locationRepo.getLast12Hours();
-    final layer1Ids = await incidentRepo.getLayer1ContactUserIds(user.id);
     final lat = samples.isNotEmpty ? samples.last.lat : null;
     final lng = samples.isNotEmpty ? samples.last.lng : null;
     final incident = await incidentRepo.createIncident(
@@ -107,7 +106,6 @@ class _SafetyCheckDialogContentState extends ConsumerState<_SafetyCheckDialogCon
       lastKnownLat: lat,
       lastKnownLng: lng,
       locationSamples: samples,
-      layer1ContactUserIds: layer1Ids,
     );
     if (!mounted) return;
     ref.read(safetyNotificationServiceProvider).cancelSafetyCheck();

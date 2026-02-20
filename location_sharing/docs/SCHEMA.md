@@ -3,7 +3,7 @@
 ## Tables
 
 ### profiles
-One-to-one with `auth.users`. Extended user info and FCM for push.
+One-to-one with `auth.users`. Extended user info.
 
 | Column        | Type      | Notes                          |
 |---------------|-----------|--------------------------------|
@@ -12,7 +12,6 @@ One-to-one with `auth.users`. Extended user info and FCM for push.
 | avatar_url    | text      | optional                       |
 | phone         | text      | optional                       |
 | school        | text      | optional                       |
-| fcm_token     | text      | for push notifications         |
 | created_at    | timestamptz | default now()                |
 | updated_at    | timestamptz | default now()                |
 
@@ -189,7 +188,7 @@ Last 12h path for the incident. Only populated after incident creation.
 ---
 
 ### always_share_locations
-Live-ish position for users who have "always share" on. Updated by app periodically.
+Live-ish position; updated by the app every 45s for **all** logged-in users (for incident readiness and so always-share contacts can see it). One row per user; upserted by `AlwaysShareLocationUpdater`.
 
 | Column     | Type      | Notes                          |
 |------------|-----------|--------------------------------|
@@ -198,7 +197,7 @@ Live-ish position for users who have "always share" on. Updated by app periodica
 | lng        | double precision |                    |
 | updated_at | timestamptz | default now()                |
 
-**RLS**: User can UPDATE their own row (when they share). User can SELECT only rows where the location owner (user_id) has the current user in their contacts with is_always_share = true. So: "I can see B's location only if B has me as an always-share contact (B shares with me)."
+**RLS**: User can UPDATE their own row. User can SELECT only rows where the location owner (user_id) has the current user in their contacts with is_always_share = true. So: "I can see B's location only if B has me as an always-share contact (B shares with me)."
 
 ---
 

@@ -8,6 +8,7 @@ A consent-first mobile app that tracks your location on-device and shares it onl
 - **Backend: Supabase**: Auth, Postgres with RLS, Edge Functions for escalation, and Realtime for incident updates. RLS keeps "who can see what" in one place and fits incident-scoped access. See schema in [docs/SCHEMA.md](docs/SCHEMA.md).
 - **Map: Google Maps**: `google_maps_flutter` for map screen, markers, and incident polylines (including path-point markers on incident detail). Simple setup and good Flutter support.
 - **Incident UX**: Home shows an "Active incidents" card when you have incidents; incident detail shows the subject's name and path markers. Resolving or confirming safe refreshes Home and Map. "I couldn't reach them" triggers escalation to the next layer.
+- **Split-up notification**: When someone is sharing their location with you and you were within 50m, then move apart, the app notifies you ("You are no longer with [name]")—SnackBar when in foreground, local notification when the app is open in background.
 
 ### Escalation order: "Closest → furthest"
 
@@ -51,9 +52,7 @@ This is implemented in the escalation Edge Function and documented in code comme
 
 4. **Google Maps**: Add `GOOGLE_MAPS_API_KEY` to your `.env.local` (see step 2). The Android and iOS builds read it from that file automatically; no need to edit the manifest or AppDelegate by hand.
 
-5. **Firebase (optional, for push)**: Run `flutterfire configure` to generate `lib/firebase_options.dart`. Then in `main.dart` call `await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);` before other init. FCM token is saved to Supabase when the user is signed in.
-
-6. **Permissions** (see below) must be declared for location and background execution.
+5. **Permissions** (see below) must be declared for location and background execution.
 
 ### Run
 
@@ -64,7 +63,7 @@ flutter run
 ## Permissions
 
 - **Location**: Foreground and background. The app requests background only after explaining why (safety check and curfew). On Android a foreground service is used when tracking is enabled.
-- **Notifications**: Required for "Are you safe?" and incident/escalation push. Configure FCM and store device token in Supabase `profiles.fcm_token`.
+- **Notifications**: Required for "Are you safe?" and split-up ("You are no longer with [name]") when the app is in background. Local notifications are used for safety checks and split-up. Incidents are visible in the app when contacts open it (no push).
 
 See platform docs:
 
@@ -91,7 +90,7 @@ Run: `flutter test`
 
 ## Docs
 
-- [Technical spec](docs/TECHNICAL_SPEC.md) — privacy, location pipeline, curfew, escalation, maps.
+- [Technical spec](docs/TECHNICAL_SPEC.md) — privacy, location pipeline, curfew, escalation, maps, split-up notification.
 - [Schema and RLS](docs/SCHEMA.md) — Postgres tables and security policies.
 
 ## License
