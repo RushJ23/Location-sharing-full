@@ -14,7 +14,7 @@ class HomeScreen extends ConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Location Sharing'),
+        title: const Text('Safe Circle'),
         titleTextStyle: theme.appBarTheme.titleTextStyle?.copyWith(
           fontSize: 20,
           fontWeight: FontWeight.w700,

@@ -1,4 +1,4 @@
-package com.example.location_sharing
+package com.locationsafe.app
 
 import io.flutter.embedding.android.FlutterActivity
 

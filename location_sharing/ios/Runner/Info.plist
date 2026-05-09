@@ -67,7 +67,7 @@
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
 	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>Location Sharing uses your location to show you on the map and to run safety checks. Location is stored only on your device unless an emergency is triggered.</string>
+	<string>Safe Circle uses your location to show you on the map and to run safety checks. Location is stored only on your device unless an emergency is triggered.</string>
 	<key>NSLocationAlwaysUsageDescription</key>
 	<string>Background location is used for curfew safety checks so we can verify you are in a safe zone. Your location stays on your device unless an emergency is triggered.</string>
 	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
