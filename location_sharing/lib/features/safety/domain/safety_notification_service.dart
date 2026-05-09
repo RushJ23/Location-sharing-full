@@ -67,7 +67,7 @@ class SafetyNotificationService {
   void Function(String incidentId)? onIncidentNotificationOpened;
 
   Future<void> initialize() async {
-    const android = AndroidInitializationSettings('@mipmap/ic_launcher');
+    const android = AndroidInitializationSettings('@drawable/ic_notification');
     const ios = DarwinInitializationSettings(
       requestAlertPermission: true,
       requestBadgePermission: true,

@@ -1,14 +1,16 @@
 import 'package:flutter/material.dart';
 
-/// Trust/safety-oriented palette: teal primary with warm neutrals.
-const Color _primary = Color(0xFF0D9488);
-const Color _primaryContainer = Color(0xFFCCFBF1);
+// Brand palette derived from Safe Circle logo
+// Navy: #0D1B2E  Teal: #2DD4BF
+const Color _primary = Color(0xFF0D9E91);           // teal-600, accessible on white
+const Color _primaryContainer = Color(0xFFB2F5EC);  // teal-100
 const Color _onPrimary = Colors.white;
-const Color _surface = Color(0xFFFAFAF9);
-const Color _surfaceContainer = Color(0xFFF5F5F4);
-const Color _onSurface = Color(0xFF1C1917);
-const Color _onSurfaceVariant = Color(0xFF57534E);
-const Color _outline = Color(0xFFA8A29E);
+const Color _navy = Color(0xFF0D1B2E);              // logo background navy
+const Color _surface = Color(0xFFF8FFFE);           // near-white with cool tint
+const Color _surfaceContainer = Color(0xFFEEFBF9);  // teal-50
+const Color _onSurface = Color(0xFF0D1B2E);         // navy for text
+const Color _onSurfaceVariant = Color(0xFF4A6572);
+const Color _outline = Color(0xFFB0C4C8);
 const Color _error = Color(0xFFDC2626);
 
 final ThemeData appTheme = ThemeData(
@@ -18,14 +20,14 @@ final ThemeData appTheme = ThemeData(
     onPrimary: _onPrimary,
     primaryContainer: _primaryContainer,
     onPrimaryContainer: const Color(0xFF134E4A),
-    secondary: const Color(0xFF0891B2),
-    onSecondary: Colors.white,
-    secondaryContainer: const Color(0xFFCFFAFE),
-    onSecondaryContainer: const Color(0xFF164E63),
-    tertiary: const Color(0xFF0F766E),
+    secondary: const Color(0xFF2DD4BF),             // logo teal (accent)
+    onSecondary: _navy,
+    secondaryContainer: const Color(0xFFCCFBF1),
+    onSecondaryContainer: _navy,
+    tertiary: _navy,                                 // navy as tertiary
     onTertiary: Colors.white,
-    tertiaryContainer: const Color(0xFF99F6E4),
-    onTertiaryContainer: const Color(0xFF134E4A),
+    tertiaryContainer: const Color(0xFF1E3A4F),
+    onTertiaryContainer: Colors.white,
     surface: _surface,
     onSurface: _onSurface,
     surfaceContainerHighest: _surfaceContainer,

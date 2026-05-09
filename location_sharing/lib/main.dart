@@ -354,7 +354,7 @@ class _LocationSharingAppState extends ConsumerState<LocationSharingApp>
       splitUpService.stop();
     }
     return MaterialApp.router(
-      title: 'Location Sharing',
+      title: 'Safe Circle',
       theme: appTheme,
       routerConfig: widget.router,
       builder: (context, child) =>
