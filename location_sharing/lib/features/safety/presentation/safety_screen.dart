@@ -1,10 +1,14 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 import '../../../core/auth/auth_providers.dart';
+import '../../../core/config/app_env.dart';
 import '../../../core/widgets/app_bar_with_back.dart';
+import '../../../shared/utils/places_service.dart';
 import '../domain/curfew_check_service.dart';
 import '../domain/curfew_schedule.dart';
 import '../domain/safe_zone.dart';
@@ -285,134 +289,18 @@ class _SafetyScreenState extends ConsumerState<SafetyScreen> {
   }
 
   Future<void> _addSafeZone(BuildContext context, WidgetRef ref, String userId) async {
-    final nameController = TextEditingController(text: 'Home');
-    final latController = TextEditingController(text: '');
-    final lngController = TextEditingController(text: '');
-    final radiusController = TextEditingController(text: '200');
-    bool useCurrentLocation = true;
-
-    if (!context.mounted) return;
-    final result = await showDialog<bool>(
+    final result = await showDialog<_SafeZoneResult>(
       context: context,
-      builder: (ctx) {
-        return StatefulBuilder(
-          builder: (context, setState) {
-            return AlertDialog(
-              title: const Text('Add safe zone'),
-              content: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    TextField(
-                      controller: nameController,
-                      decoration: const InputDecoration(
-                        labelText: 'Name',
-                        hintText: 'e.g. Home, Office',
-                      ),
-                      textCapitalization: TextCapitalization.words,
-                    ),
-                    const SizedBox(height: 12),
-                    CheckboxListTile(
-                      value: useCurrentLocation,
-                      onChanged: (v) => setState(() => useCurrentLocation = v ?? true),
-                      title: const Text('Use my current location'),
-                      contentPadding: EdgeInsets.zero,
-                      controlAffinity: ListTileControlAffinity.leading,
-                    ),
-                    if (!useCurrentLocation) ...[
-                      TextField(
-                        controller: latController,
-                        decoration: const InputDecoration(labelText: 'Latitude'),
-                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                      ),
-                      const SizedBox(height: 8),
-                      TextField(
-                        controller: lngController,
-                        decoration: const InputDecoration(labelText: 'Longitude'),
-                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                      ),
-                    ],
-                    const SizedBox(height: 12),
-                    TextField(
-                      controller: radiusController,
-                      decoration: const InputDecoration(
-                        labelText: 'Radius (meters)',
-                        hintText: 'e.g. 200',
-                      ),
-                      keyboardType: TextInputType.number,
-                    ),
-                  ],
-                ),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.of(ctx).pop(false),
-                  child: const Text('Cancel'),
-                ),
-                FilledButton(
-                  onPressed: () async {
-                    if (useCurrentLocation) {
-                      final pos = await _ensureLocationAndGetCurrent(ctx);
-                      if (pos == null) return;
-                      if (ctx.mounted) {
-                        latController.text = pos.latitude.toString();
-                        lngController.text = pos.longitude.toString();
-                      }
-                    }
-                    final name = nameController.text.trim();
-                    if (name.isEmpty) {
-                      ScaffoldMessenger.of(ctx).showSnackBar(
-                        const SnackBar(content: Text('Enter a name')),
-                      );
-                      return;
-                    }
-                    final lat = double.tryParse(latController.text);
-                    final lng = double.tryParse(lngController.text);
-                    if (lat == null || lng == null) {
-                      ScaffoldMessenger.of(ctx).showSnackBar(
-                        const SnackBar(content: Text('Enter valid latitude and longitude')),
-                      );
-                      return;
-                    }
-                    final radius = double.tryParse(radiusController.text);
-                    if (radius == null || radius <= 0) {
-                      ScaffoldMessenger.of(ctx).showSnackBar(
-                        const SnackBar(content: Text('Enter a valid radius in meters')),
-                      );
-                      return;
-                    }
-                    Navigator.of(ctx).pop(true);
-                  },
-                  child: const Text('Add'),
-                ),
-              ],
-            );
-          },
-        );
-      },
+      builder: (ctx) => _AddSafeZoneDialog(placesService: PlacesService(AppEnv.googleMapsApiKey)),
     );
-
-    if (result != true || !context.mounted) return;
-
-    final name = nameController.text.trim();
-    double? lat = double.tryParse(latController.text);
-    double? lng = double.tryParse(lngController.text);
-    if (lat == null || lng == null) {
-      final pos = await _ensureLocationAndGetCurrent(context);
-      if (pos == null) return;
-      lat = pos.latitude;
-      lng = pos.longitude;
-    }
-    final radius = double.tryParse(radiusController.text) ?? 200.0;
-
+    if (result == null || !context.mounted) return;
     try {
       await ref.read(safeZoneRepositoryProvider).insertSafeZone(
             userId: userId,
-            name: name,
-            centerLat: lat,
-            centerLng: lng,
-            radiusMeters: radius,
+            name: result.name,
+            centerLat: result.lat,
+            centerLng: result.lng,
+            radiusMeters: result.radiusMeters,
           );
       if (!context.mounted) return;
       ref.invalidate(_safeZonesProvider(userId));
@@ -421,9 +309,7 @@ class _SafetyScreenState extends ConsumerState<SafetyScreen> {
       );
     } catch (e) {
       if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error: $e')),
-      );
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
     }
   }
 
@@ -828,6 +714,287 @@ class _SectionHeader extends StatelessWidget {
     );
   }
 }
+
+// ---------------------------------------------------------------------------
+// Add safe zone dialog with Places search
+// ---------------------------------------------------------------------------
+
+class _SafeZoneResult {
+  const _SafeZoneResult({
+    required this.name,
+    required this.lat,
+    required this.lng,
+    required this.radiusMeters,
+  });
+  final String name;
+  final double lat;
+  final double lng;
+  final double radiusMeters;
+}
+
+class _AddSafeZoneDialog extends StatefulWidget {
+  const _AddSafeZoneDialog({required this.placesService});
+  final PlacesService placesService;
+
+  @override
+  State<_AddSafeZoneDialog> createState() => _AddSafeZoneDialogState();
+}
+
+class _AddSafeZoneDialogState extends State<_AddSafeZoneDialog> {
+  final _nameController = TextEditingController(text: 'Home');
+  final _searchController = TextEditingController();
+  final _radiusController = TextEditingController(text: '200');
+
+  List<PlaceSuggestion> _suggestions = [];
+  bool _searching = false;
+  bool _locationMode = true; // true = current location, false = place search
+  double? _lat;
+  double? _lng;
+  Timer? _debounce;
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _searchController.dispose();
+    _radiusController.dispose();
+    _debounce?.cancel();
+    super.dispose();
+  }
+
+  void _onSearchChanged(String value) {
+    _debounce?.cancel();
+    if (value.trim().isEmpty) {
+      setState(() => _suggestions = []);
+      return;
+    }
+    _debounce = Timer(const Duration(milliseconds: 350), () async {
+      if (!mounted) return;
+      setState(() => _searching = true);
+      final results = await widget.placesService.autocomplete(value);
+      if (!mounted) return;
+      setState(() {
+        _suggestions = results;
+        _searching = false;
+      });
+    });
+  }
+
+  Future<void> _selectSuggestion(PlaceSuggestion suggestion) async {
+    setState(() {
+      _suggestions = [];
+      _searching = true;
+      _searchController.text = suggestion.description;
+    });
+    final details = await widget.placesService.getDetails(suggestion.placeId);
+    if (!mounted) return;
+    if (details == null) {
+      setState(() => _searching = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not load place details. Try again.')),
+      );
+      return;
+    }
+    setState(() {
+      _lat = details.lat;
+      _lng = details.lng;
+      _searching = false;
+      if (_nameController.text.trim() == 'Home' || _nameController.text.trim().isEmpty) {
+        _nameController.text = details.name;
+      }
+    });
+  }
+
+  Future<void> _useCurrentLocation(BuildContext context) async {
+    setState(() => _searching = true);
+    final pos = await _ensureLocationAndGetCurrent(context);
+    if (!mounted) return;
+    setState(() {
+      _lat = pos?.latitude;
+      _lng = pos?.longitude;
+      _searching = false;
+    });
+  }
+
+  void _submit() {
+    final name = _nameController.text.trim();
+    if (name.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Enter a name for this safe zone')),
+      );
+      return;
+    }
+    if (_lat == null || _lng == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Select a place or use your current location')),
+      );
+      return;
+    }
+    final radius = double.tryParse(_radiusController.text);
+    if (radius == null || radius <= 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Enter a valid radius in meters')),
+      );
+      return;
+    }
+    Navigator.of(context).pop(_SafeZoneResult(
+      name: name,
+      lat: _lat!,
+      lng: _lng!,
+      radiusMeters: radius,
+    ));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final hasLocation = _lat != null && _lng != null;
+
+    return AlertDialog(
+      title: const Text('Add safe zone'),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            TextField(
+              controller: _nameController,
+              decoration: const InputDecoration(
+                labelText: 'Name',
+                hintText: 'e.g. Home, School, Work',
+              ),
+              textCapitalization: TextCapitalization.words,
+            ),
+            const SizedBox(height: 16),
+            Text('Location', style: theme.textTheme.titleSmall),
+            const SizedBox(height: 8),
+            SegmentedButton<bool>(
+              segments: const [
+                ButtonSegment(value: true, label: Text('Current location'), icon: Icon(Icons.my_location_rounded)),
+                ButtonSegment(value: false, label: Text('Search place'), icon: Icon(Icons.search_rounded)),
+              ],
+              selected: {_locationMode},
+              onSelectionChanged: (v) => setState(() {
+                _locationMode = v.first;
+                _suggestions = [];
+                _lat = null;
+                _lng = null;
+              }),
+            ),
+            const SizedBox(height: 12),
+            if (_locationMode) ...[
+              FilledButton.tonal(
+                onPressed: _searching ? null : () => _useCurrentLocation(context),
+                child: _searching
+                    ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                    : const Text('Use my current location'),
+              ),
+              if (hasLocation)
+                Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: Row(
+                    children: [
+                      Icon(Icons.check_circle_rounded, size: 16, color: theme.colorScheme.primary),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          '${_lat!.toStringAsFixed(5)}, ${_lng!.toStringAsFixed(5)}',
+                          style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.primary),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+            ] else ...[
+              TextField(
+                controller: _searchController,
+                decoration: InputDecoration(
+                  hintText: 'Search for a place…',
+                  prefixIcon: const Icon(Icons.search_rounded),
+                  suffixIcon: _searching
+                      ? const Padding(
+                          padding: EdgeInsets.all(12),
+                          child: SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)),
+                        )
+                      : null,
+                ),
+                onChanged: _onSearchChanged,
+              ),
+              if (_suggestions.isNotEmpty)
+                Container(
+                  margin: const EdgeInsets.only(top: 4),
+                  decoration: BoxDecoration(
+                    border: Border.all(color: theme.colorScheme.outlineVariant),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: _suggestions.map((s) {
+                      return InkWell(
+                        onTap: () => _selectSuggestion(s),
+                        borderRadius: BorderRadius.circular(8),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                          child: Row(
+                            children: [
+                              Icon(Icons.place_rounded, size: 18, color: theme.colorScheme.onSurfaceVariant),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(s.description, style: theme.textTheme.bodyMedium),
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                ),
+              if (hasLocation && _suggestions.isEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: Row(
+                    children: [
+                      Icon(Icons.check_circle_rounded, size: 16, color: theme.colorScheme.primary),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          _searchController.text,
+                          style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.primary),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+            ],
+            const SizedBox(height: 12),
+            TextField(
+              controller: _radiusController,
+              decoration: const InputDecoration(
+                labelText: 'Radius (meters)',
+                hintText: 'e.g. 200',
+                helperText: 'How far from the center counts as "safe"',
+              ),
+              keyboardType: TextInputType.number,
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: _submit,
+          child: const Text('Add'),
+        ),
+      ],
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
 
 final _safeZonesProvider =
     FutureProvider.family<List<SafeZone>, String>((ref, userId) async {

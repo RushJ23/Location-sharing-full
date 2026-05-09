@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    SETUP REQUIRED: In Xcode, open Runner.xcworkspace → select Runner target →
+    Build Settings → Code Signing Entitlements → set to "Runner/Runner.entitlements"
+    Also enable Push Notifications capability in Signing & Capabilities tab.
+-->
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>aps-environment</key>
+    <string>production</string>
+</dict>
+</plist>

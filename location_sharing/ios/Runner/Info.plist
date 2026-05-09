@@ -68,12 +68,19 @@
 	</array>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Location Sharing uses your location to show you on the map and to run safety checks. Location is stored only on your device unless an emergency is triggered.</string>
+	<key>NSLocationAlwaysUsageDescription</key>
+	<string>Background location is used for curfew safety checks so we can verify you are in a safe zone. Your location stays on your device unless an emergency is triggered.</string>
 	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
 	<string>Background location is used for curfew safety checks so we can see if you are in a safe zone. Location stays on your device unless an emergency is triggered.</string>
+	<key>NSUserTrackingUsageDescription</key>
+	<string>This app does not track you for advertising. Location data stays on your device unless an emergency is triggered.</string>
+	<key>NSContactsUsageDescription</key>
+	<string>Emergency contacts are managed within the app. We do not access your device contacts list.</string>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>location</string>
 		<string>fetch</string>
+		<string>remote-notification</string>
 	</array>
 	<key>CFBundleURLTypes</key>
 	<array>

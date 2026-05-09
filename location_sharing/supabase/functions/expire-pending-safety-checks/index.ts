@@ -2,8 +2,9 @@
 // Invoke via cron (external or Supabase) every 1-2 minutes.
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
+const origin = Deno.env.get('SUPABASE_URL') ?? '*';
 const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Origin': origin,
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
@@ -30,7 +31,25 @@ Deno.serve(async (req) => {
 
     const expiredList = expired ?? [];
     for (const row of expiredList) {
-      const userId = row.user_id;
+      const userId = row.user_id as string;
+
+      // --- Idempotency guard: skip if an active curfew_timeout incident already exists for this user within the last 30 minutes ---
+      const { data: recentIncident } = await supabase
+        .from('incidents')
+        .select('id')
+        .eq('user_id', userId)
+        .eq('status', 'active')
+        .eq('trigger', 'curfew_timeout')
+        .gte('created_at', new Date(Date.now() - 30 * 60 * 1000).toISOString())
+        .maybeSingle();
+
+      if (recentIncident) {
+        // Already have an active incident — just mark the check responded and continue
+        await supabase.from('pending_safety_checks')
+          .update({ responded_at: new Date().toISOString() })
+          .eq('id', row.id);
+        continue;
+      }
 
       const { data: samples } = await supabase
         .from('user_location_samples')
@@ -126,21 +145,33 @@ Deno.serve(async (req) => {
       }
     };
 
+    // Returns true if the layer has NOT yet been escalated (no rows in incident_access for this layer)
+    const checkLayer = async (incidentId: string, layer: number): Promise<boolean> => {
+      const { data } = await supabase
+        .from('incident_access')
+        .select('id')
+        .eq('incident_id', incidentId)
+        .eq('layer', layer)
+        .limit(1);
+      return (data ?? []).length === 0;
+    };
+
     for (const inc of activeIncidents ?? []) {
       const raw = (inc as { created_at?: string }).created_at;
       if (!raw || typeof raw !== 'string') continue;
       // Ensure UTC parsing. PostgREST returns "2026-02-19 23:36:58.384268+00" (short
-      // TZ) or "2026-02-19 23:00:00" (none). Only append Z when there's no TZ - our
+      // TZ) or "2026-02-19 23:00:00" (none). Only append Z when there's no TZ — our
       // previous regex missed "+00" and produced invalid "+00Z", causing NaN/skip.
       const hasTz = /[Zz]|[+-]\d{1,2}(:?\d{2})?$/.test(raw);
       const utcStr = hasTz ? raw : raw.replace(' ', 'T') + 'Z';
       const createdMs = new Date(utcStr).getTime();
       if (Number.isNaN(createdMs)) continue;
+
       if (createdMs <= twentyMinAgoMs) {
-        await invokeEscalate(inc.id, 2);
-        await invokeEscalate(inc.id, 3);
+        if (await checkLayer(inc.id, 2)) await invokeEscalate(inc.id, 2);
+        if (await checkLayer(inc.id, 3)) await invokeEscalate(inc.id, 3);
       } else if (createdMs <= tenMinAgoMs) {
-        await invokeEscalate(inc.id, 2);
+        if (await checkLayer(inc.id, 2)) await invokeEscalate(inc.id, 2);
       }
     }
 
